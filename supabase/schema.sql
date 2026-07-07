@@ -25,3 +25,4 @@ alter table macro_series add column if not exists sparkline jsonb;
 alter table macro_series add column if not exists window_label text;
 alter table macro_series add column if not exists history jsonb;
 alter table macro_series add column if not exists extra_stats jsonb;
+alter table macro_series add column if not exists payload jsonb;

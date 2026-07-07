@@ -398,6 +398,118 @@ export function avgChangeHistory(levelHist: HistPoint[], months: number): HistPo
   return out;
 }
 
+function median(sorted: number[]): number {
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/** Median/MAD z-score of the latest value — outliers and fat tails don't dominate the way mean/std lets them. */
+export function robustZScore(values: number[]): number | null {
+  if (values.length < 5) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const med = median(sorted);
+  const absDevs = values.map((v) => Math.abs(v - med)).sort((a, b) => a - b);
+  const mad = median(absDevs);
+  const robustStd = mad * 1.4826;
+  const latest = values[values.length - 1];
+  if (robustStd === 0) return 0;
+  return (latest - med) / robustStd;
+}
+
+/** Non-parametric percentile rank (0-100) of the latest value within the given window. */
+export function percentileRankOf(values: number[]): number | null {
+  if (values.length < 5) return null;
+  const latest = values[values.length - 1];
+  const below = values.filter((v) => v <= latest).length;
+  return (below / values.length) * 100;
+}
+
+/** How many trailing observations count as "recent regime" for a given cadence — roughly 2 years. */
+export function windowSizeForCadence(cadence: Cadence): number {
+  switch (cadence) {
+    case "daily":
+      return 504;
+    case "weekly":
+      return 104;
+    case "monthly":
+      return 24;
+    case "quarterly":
+      return 8;
+  }
+}
+
+export interface WindowedBias {
+  robustZ: number | null;
+  percentile: number | null;
+  /** -1..1, blends robust z (60%) and percentile rank (40%) so no single distributional assumption dominates. */
+  blended: number | null;
+}
+
+/**
+ * Positioning-style read for genuinely mean-reverting series: (1) only a
+ * trailing ~2y window so a decade-old regime doesn't distort what "normal"
+ * means today, and (2) robust statistics (median/MAD) with a non-parametric
+ * percentile-rank cross-check blended in.
+ */
+export function computeWindowedBias(historyValues: number[], cadence: Cadence): WindowedBias {
+  const window = historyValues.slice(-windowSizeForCadence(cadence));
+  const robustZ = robustZScore(window);
+  const percentile = percentileRankOf(window);
+  if (robustZ === null || percentile === null) return { robustZ, percentile, blended: null };
+  const zComponent = Math.max(-1, Math.min(1, robustZ / 2));
+  const pComponent = (percentile - 50) / 50;
+  const blended = 0.6 * zComponent + 0.4 * pComponent;
+  return { robustZ, percentile, blended };
+}
+
+/**
+ * For indicators where the LEVEL is arbitrary/structurally-shifting but the
+ * TREND is the signal — payrolls, WALCL pace, claims, M2, yields as a
+ * financial-conditions read. Compares the mean of the most recent `window`
+ * observations against the mean of the `window` before that, normalized by
+ * the series' own period-over-period volatility.
+ */
+export function momentumSignal(values: number[], window: number): number | null {
+  if (values.length < window * 2) return null;
+  const recent = values.slice(-window);
+  const prior = values.slice(-window * 2, -window);
+  const avg = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+  const change = avg(recent) - avg(prior);
+  const diffs: number[] = [];
+  for (let i = 1; i < values.length; i++) diffs.push(values[i] - values[i - 1]);
+  const diffMean = avg(diffs);
+  const diffStd = Math.sqrt(diffs.reduce((a, b) => a + (b - diffMean) ** 2, 0) / diffs.length) || 1;
+  const raw = change / (diffStd * Math.sqrt(window));
+  return Math.max(-1, Math.min(1, raw / 2));
+}
+
+/**
+ * For indicators with a real economic reference point — inflation vs the
+ * Fed's 2% target, unemployment vs NAIRU, a spread vs its 0 inversion line.
+ * `band` sets how far from `reference` counts as a "full" ±1 read.
+ */
+export function distanceSignal(latest: number, reference: number, band: number): number {
+  return Math.max(-1, Math.min(1, (latest - reference) / band));
+}
+
+/**
+ * Pearson correlation of period-over-period CHANGES between two date-aligned
+ * series. Raw levels of any two trending series correlate spuriously (~0.9
+ * for a growing payroll level vs a rising index, regardless of any real
+ * relationship) — differencing first is what makes the measured correlation
+ * mean something.
+ */
+export function changeCorrelation(
+  a: { date: string; value: number }[],
+  b: { date: string; value: number }[],
+  toleranceDays = 6
+): number | null {
+  const aligned = alignByDate(a, b, toleranceDays);
+  if (aligned.a.length < 9) return null;
+  const diff = (v: number[]) => v.slice(1).map((x, i) => x - v[i]);
+  return pearson(diff(aligned.a), diff(aligned.b));
+}
+
 /** Elementwise a-b, aligning b onto a's dates by nearest match within toleranceDays. */
 export function subtractHistory(a: HistPoint[], b: HistPoint[], toleranceDays = 3): HistPoint[] {
   const bByTime = b.map((p) => ({ t: new Date(p.date).getTime(), v: p.value })).sort((x, y) => x.t - y.t);
