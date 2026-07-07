@@ -5,11 +5,15 @@ import type { MacroPanel } from "@/lib/macroData";
 import type { MarketRow } from "@/lib/getMarkets";
 import SeriesCard from "@/components/SeriesCard";
 import QuantCard from "@/components/QuantCard";
+import NewsFeedCard from "@/components/NewsFeedCard";
 import MarketTicker from "@/components/MarketTicker";
+import BiasTape from "@/components/BiasTape";
 import TopologyGraph from "@/components/TopologyGraph";
+import ImpactMatrix from "@/components/ImpactMatrix";
 import NetBiasPage from "@/components/NetBiasPage";
 import PanelIcon from "@/components/PanelIcon";
 import { MARKET_SYMBOLS } from "@/lib/markets";
+import { getSignTone } from "@/lib/bias";
 import type { Horizon } from "@/lib/netBias";
 
 const HORIZONS: { id: Horizon; label: string }[] = [
@@ -20,12 +24,67 @@ const HORIZONS: { id: Horizon; label: string }[] = [
 
 const DEEP_PANELS = new Set(["us-macro", "yield-rates", "cot-positioning", "transmission", "geopolitics"]);
 const TOPOLOGY_ID = "topology";
+const MATRIX_ID = "impact-matrix";
 const NET_BIAS_ID = "net-bias";
 
-function panelPulse(panel: MacroPanel): { up: number; down: number; flat: number; pending: number } {
-  const counts = { up: 0, down: 0, flat: 0, pending: 0 };
-  panel.series.forEach((s) => counts[s.status]++);
-  return counts;
+/** Count of strong reads (|score| >= 0.5 on the -1..1 method scale) per panel, split by good/bad tone. */
+function panelSignals(panel: MacroPanel): { bull: number; bear: number } {
+  let bull = 0;
+  let bear = 0;
+  for (const s of panel.series) {
+    if (s.zscore === null || Math.abs(s.zscore) < 0.5) continue;
+    const tone = getSignTone(s.id, s.zscore);
+    if (tone === "up") bull++;
+    else if (tone === "down") bear++;
+  }
+  return { bull, bear };
+}
+
+function NavButton({
+  isActive,
+  onClick,
+  icon,
+  title,
+  subtitle,
+}: {
+  isActive: boolean;
+  onClick: () => void;
+  icon: string;
+  title: string;
+  subtitle: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-sans transition-all duration-150"
+      style={
+        isActive
+          ? {
+              background: "color-mix(in srgb, var(--accent) 11%, transparent)",
+              boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent)",
+            }
+          : undefined
+      }
+    >
+      {isActive && (
+        <span
+          className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full"
+          style={{ background: "var(--accent)" }}
+        />
+      )}
+      <PanelIcon id={icon} className="shrink-0 transition-colors" style={{ color: isActive ? "var(--accent)" : "var(--text-faint)" }} />
+      <div className="min-w-0 flex-1">
+        <div
+          className={`truncate text-[0.85rem] font-semibold transition-colors ${
+            isActive ? "text-[var(--text)]" : "text-[var(--text-dim)] group-hover:text-[var(--text)]"
+          }`}
+        >
+          {title}
+        </div>
+        <div className="mt-0.5 text-[0.66rem] text-[var(--text-faint)]">{subtitle}</div>
+      </div>
+    </button>
+  );
 }
 
 export default function DashboardShell({
@@ -42,12 +101,23 @@ export default function DashboardShell({
   const [horizon, setHorizon] = useState<Horizon>("weekly");
   const active = panels.find((p) => p.id === activeId);
   const isTopology = activeId === TOPOLOGY_ID;
+  const isMatrix = activeId === MATRIX_ID;
   const isNetBias = activeId === NET_BIAS_ID;
   const assetLabel = MARKET_SYMBOLS.find((m) => m.symbol === assetFilter)?.label ?? null;
 
   return (
     <div className="flex min-h-screen flex-col">
       <MarketTicker markets={markets} />
+      <BiasTape
+        panels={panels}
+        markets={markets}
+        horizon={horizon}
+        activeSymbol={assetFilter}
+        onPick={(symbol) => {
+          setAssetFilter(symbol === assetFilter ? "" : symbol);
+          setActiveId(NET_BIAS_ID);
+        }}
+      />
 
       <div className="flex flex-1">
         <aside className="flex w-[248px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel-2)]">
@@ -64,11 +134,11 @@ export default function DashboardShell({
               >
                 M
               </div>
-              <div className="text-[1.05rem] font-semibold tracking-wide">
+              <div className="font-display text-[1.3rem] leading-none">
                 <span className="text-[var(--accent)]">Macro</span>pad
               </div>
             </div>
-            <div className="mt-2.5 flex items-center gap-1.5 font-sans text-[0.66rem] uppercase tracking-[0.09em] text-[var(--text-faint)]">
+            <div className="mt-2.5 flex items-center gap-1.5 font-mono text-[0.62rem] uppercase tracking-[0.09em] text-[var(--text-faint)]">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--up)] opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--up)]" />
@@ -79,7 +149,7 @@ export default function DashboardShell({
 
           <div className="border-b border-[var(--border)] px-3.5 py-3.5">
             <label className="mb-1.5 block font-sans text-[0.64rem] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
-              Filter by asset
+              Asset lens
             </label>
             <div className="relative">
               <select
@@ -112,7 +182,7 @@ export default function DashboardShell({
             </div>
             {assetFilter && (
               <p className="m-0 mt-1.5 font-sans text-[0.68rem] leading-snug text-[var(--text-faint)]">
-                Indicators not linked to {assetLabel} are grayed out below.
+                Indicators with no mapped impact on {assetLabel} are dimmed below.
               </p>
             )}
           </div>
@@ -148,129 +218,53 @@ export default function DashboardShell({
 
           <nav className="flex flex-1 flex-col gap-1 p-3">
             {panels.map((panel) => {
-              const pulse = panelPulse(panel);
-              const isActive = panel.id === activeId;
+              const { bull, bear } = panelSignals(panel);
               return (
-                <button
+                <NavButton
                   key={panel.id}
+                  isActive={panel.id === activeId}
                   onClick={() => setActiveId(panel.id)}
-                  className="group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-sans transition-all duration-150"
-                  style={
-                    isActive
-                      ? {
-                          background: "color-mix(in srgb, var(--accent) 11%, transparent)",
-                          boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent)",
-                        }
-                      : undefined
+                  icon={panel.id}
+                  title={panel.title}
+                  subtitle={
+                    bull + bear === 0 ? (
+                      "no strong reads"
+                    ) : (
+                      <span className="font-mono">
+                        {bull > 0 && <span className="text-[var(--up)]">{bull} bull</span>}
+                        {bull > 0 && bear > 0 && " · "}
+                        {bear > 0 && <span className="text-[var(--down)]">{bear} bear</span>}
+                        <span> strong</span>
+                      </span>
+                    )
                   }
-                >
-                  {isActive && (
-                    <span
-                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full"
-                      style={{ background: "var(--accent)" }}
-                    />
-                  )}
-                  <PanelIcon
-                    id={panel.id}
-                    className="shrink-0 transition-colors"
-                    style={{ color: isActive ? "var(--accent)" : "var(--text-faint)" }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className={`truncate text-[0.85rem] font-semibold transition-colors ${
-                        isActive ? "text-[var(--text)]" : "text-[var(--text-dim)] group-hover:text-[var(--text)]"
-                      }`}
-                    >
-                      {panel.title}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      {pulse.up > 0 && (
-                        <span className="flex items-center gap-1 text-[0.66rem] font-semibold text-[var(--up)]">
-                          <span className="inline-block h-1 w-1 rounded-full bg-[var(--up)]" />
-                          {pulse.up}
-                        </span>
-                      )}
-                      {pulse.down > 0 && (
-                        <span className="flex items-center gap-1 text-[0.66rem] font-semibold text-[var(--down)]">
-                          <span className="inline-block h-1 w-1 rounded-full bg-[var(--down)]" />
-                          {pulse.down}
-                        </span>
-                      )}
-                      {pulse.flat + pulse.pending > 0 && (
-                        <span className="flex items-center gap-1 text-[0.66rem] font-semibold text-[var(--text-faint)]">
-                          <span className="inline-block h-1 w-1 rounded-full bg-[var(--text-faint)]" />
-                          {pulse.flat + pulse.pending}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
+                />
               );
             })}
 
             <div className="my-2 border-t border-[var(--border)]" />
 
-            <button
+            <NavButton
+              isActive={isTopology}
               onClick={() => setActiveId(TOPOLOGY_ID)}
-              className="group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-sans transition-all duration-150"
-              style={
-                isTopology
-                  ? {
-                      background: "color-mix(in srgb, var(--accent) 11%, transparent)",
-                      boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent)",
-                    }
-                  : undefined
-              }
-            >
-              {isTopology && (
-                <span
-                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full"
-                  style={{ background: "var(--accent)" }}
-                />
-              )}
-              <PanelIcon id="topology" className="shrink-0 transition-colors" style={{ color: isTopology ? "var(--accent)" : "var(--text-faint)" }} />
-              <div className="min-w-0 flex-1">
-                <div
-                  className={`truncate text-[0.85rem] font-semibold transition-colors ${
-                    isTopology ? "text-[var(--text)]" : "text-[var(--text-dim)] group-hover:text-[var(--text)]"
-                  }`}
-                >
-                  Topology
-                </div>
-                <div className="mt-0.5 text-[0.66rem] text-[var(--text-faint)]">every indicator, linked</div>
-              </div>
-            </button>
-
-            <button
+              icon="topology"
+              title="Topology"
+              subtitle="every indicator, linked"
+            />
+            <NavButton
+              isActive={isMatrix}
+              onClick={() => setActiveId(MATRIX_ID)}
+              icon="impact-matrix"
+              title="Impact Matrix"
+              subtitle="every indicator × every asset"
+            />
+            <NavButton
+              isActive={isNetBias}
               onClick={() => setActiveId(NET_BIAS_ID)}
-              className="group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-sans transition-all duration-150"
-              style={
-                isNetBias
-                  ? {
-                      background: "color-mix(in srgb, var(--accent) 11%, transparent)",
-                      boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent)",
-                    }
-                  : undefined
-              }
-            >
-              {isNetBias && (
-                <span
-                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full"
-                  style={{ background: "var(--accent)" }}
-                />
-              )}
-              <PanelIcon id="net-bias" className="shrink-0 transition-colors" style={{ color: isNetBias ? "var(--accent)" : "var(--text-faint)" }} />
-              <div className="min-w-0 flex-1">
-                <div
-                  className={`truncate text-[0.85rem] font-semibold transition-colors ${
-                    isNetBias ? "text-[var(--text)]" : "text-[var(--text-dim)] group-hover:text-[var(--text)]"
-                  }`}
-                >
-                  Net Bias
-                </div>
-                <div className="mt-0.5 text-[0.66rem] text-[var(--text-faint)]">combined read per asset</div>
-              </div>
-            </button>
+              icon="net-bias"
+              title="Net Bias"
+              subtitle="combined read per asset"
+            />
           </nav>
 
           <div className="border-t border-[var(--border)] px-5 py-3.5 font-mono text-[0.66rem] text-[var(--text-faint)]">
@@ -282,21 +276,32 @@ export default function DashboardShell({
           {isTopology ? (
             <>
               <header className="mb-7">
-                <h1 className="m-0 text-balance text-[1.5rem] font-semibold">Topology</h1>
+                <h1 className="font-display m-0 text-balance text-[1.5rem] font-semibold">Topology</h1>
                 <p className="m-0 mt-1 max-w-[70ch] font-sans text-[0.9rem] text-[var(--text-dim)]">
-                  Every indicator across every panel, linked to the tradable market it actually moves. Panel nodes
+                  Every indicator across every panel, linked to the tradable markets it actually moves. Panel nodes
                   cluster their own indicators; drag anything to explore.
                 </p>
               </header>
               <TopologyGraph panels={panels} markets={markets} />
             </>
+          ) : isMatrix ? (
+            <>
+              <header className="mb-7">
+                <h1 className="font-display m-0 text-balance text-[1.5rem] font-semibold">Impact Matrix</h1>
+                <p className="m-0 mt-1 max-w-[74ch] font-sans text-[0.9rem] text-[var(--text-dim)]">
+                  The signed weight map Net Bias runs on: which indicators move which assets, in which direction,
+                  and how hard. Hover a cell for the reasoning.
+                </p>
+              </header>
+              <ImpactMatrix panels={panels} />
+            </>
           ) : isNetBias ? (
             <>
               <header className="mb-7">
-                <h1 className="m-0 text-balance text-[1.5rem] font-semibold">Net Bias</h1>
+                <h1 className="font-display m-0 text-balance text-[1.5rem] font-semibold">Net Bias</h1>
                 <p className="m-0 mt-1 max-w-[70ch] font-sans text-[0.9rem] text-[var(--text-dim)]">
-                  Every linked indicator's bias combined into one read per asset — weighted by how far each sits
-                  from its own normal range.
+                  Every mapped indicator combined into one signed read per asset — polarized when the evidence is,
+                  neutral only when it actually is.
                 </p>
               </header>
               <NetBiasPage
@@ -310,7 +315,7 @@ export default function DashboardShell({
           ) : active ? (
             <>
               <header className="mb-7">
-                <h1 className="m-0 text-balance text-[1.5rem] font-semibold">{active.title}</h1>
+                <h1 className="font-display m-0 text-balance text-[1.5rem] font-semibold">{active.title}</h1>
                 <p className="m-0 mt-1 max-w-[60ch] font-sans text-[0.9rem] text-[var(--text-dim)]">
                   {active.description}
                 </p>
@@ -318,7 +323,9 @@ export default function DashboardShell({
 
               <div className={DEEP_PANELS.has(active.id) ? "flex flex-col gap-2" : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"}>
                 {active.series.map((series) =>
-                  DEEP_PANELS.has(active.id) ? (
+                  series.id === "geo:news-feed" ? (
+                    <NewsFeedCard key={series.id} series={series} />
+                  ) : DEEP_PANELS.has(active.id) ? (
                     <QuantCard
                       key={series.id}
                       series={series}

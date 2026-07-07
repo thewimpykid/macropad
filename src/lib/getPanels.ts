@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { macroPanels, type MacroPanel, type SeriesStatus, type HistoryPoint, type ExtraStat, type NewsHeadlinePayload } from "@/lib/macroData";
+import { macroPanels, type MacroPanel, type SeriesStatus, type HistoryPoint, type ExtraStat, type SeriesPayload } from "@/lib/macroData";
 
 interface DbRow {
   id: string;
@@ -11,7 +11,7 @@ interface DbRow {
   window_label: string | null;
   history: HistoryPoint[] | null;
   extra_stats: ExtraStat[] | null;
-  payload: { headlines: NewsHeadlinePayload[] } | null;
+  payload: SeriesPayload | null;
   updated_at: string;
 }
 
@@ -20,15 +20,30 @@ export async function getPanels(): Promise<{ panels: MacroPanel[]; lastUpdated: 
     return { panels: macroPanels, lastUpdated: null };
   }
 
-  const { data, error } = await supabase
-    .from("macro_series")
-    .select("id, value, status, note, zscore, sparkline, window_label, history, extra_stats, payload, updated_at");
+  // payload is a later migration — retry without it so a pre-migration DB
+  // degrades to "no news feed" instead of a blank dashboard.
+  let data: DbRow[] | null = null;
+  let error: { message: string } | null = null;
+  {
+    const res = await supabase
+      .from("macro_series")
+      .select("id, value, status, note, zscore, sparkline, window_label, history, extra_stats, payload, updated_at");
+    data = res.data as DbRow[] | null;
+    error = res.error;
+  }
+  if (error && /payload/i.test(error.message)) {
+    const res = await supabase
+      .from("macro_series")
+      .select("id, value, status, note, zscore, sparkline, window_label, history, extra_stats, updated_at");
+    data = res.data as DbRow[] | null;
+    error = res.error;
+  }
 
   if (error || !data) {
     return { panels: macroPanels, lastUpdated: null };
   }
 
-  const byId = new Map<string, DbRow>(data.map((row: DbRow) => [row.id, row]));
+  const byId = new Map<string, DbRow>(data.map((row) => [row.id, row]));
   let lastUpdated: string | null = null;
 
   const panels = macroPanels.map((panel) => ({
@@ -47,7 +62,7 @@ export async function getPanels(): Promise<{ panels: MacroPanel[]; lastUpdated: 
         windowLabel: row.window_label,
         history: row.history,
         extraStats: row.extra_stats,
-        payload: row.payload,
+        payload: row.payload ?? null,
       };
     }),
   }));

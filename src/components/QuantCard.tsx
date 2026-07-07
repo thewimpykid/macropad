@@ -27,12 +27,12 @@ import {
 } from "@/lib/stats";
 import SeriesCard from "@/components/SeriesCard";
 import Sparkline from "@/components/Sparkline";
-import ZScoreSurface3D from "@/components/ZScoreSurface3D";
+import ZHeatmap from "@/components/ZHeatmap";
 import MarketLink from "@/components/MarketLink";
 import SpecializedStatChart from "@/components/SpecializedStatChart";
 import NewsFeedCard from "@/components/NewsFeedCard";
 import { getBias, getDirectionTone, getSignTone } from "@/lib/bias";
-import { MARKET_LINKS } from "@/lib/markets";
+import { IMPACTS, marketRowId } from "@/lib/markets";
 import { computeIndicatorSignal, getSignalConfig, type SignalMethod } from "@/lib/indicatorSignal";
 import type { MarketRow } from "@/lib/getMarkets";
 
@@ -223,11 +223,11 @@ function PositioningBody({ series, history, values }: { series: MacroSeries; his
       </div>
 
       <div className="mt-6">
-        <ZScoreSurface3D history={history} seriesName={series.name} />
-        <p className="mt-1.5 font-sans text-[0.74rem] leading-snug text-[var(--text-faint)] opacity-90">
-          Same rolling z-score, swept across 8 lookback windows at once. A signal that stays tall across every row is
-          robust to window choice; one tall in a single row is likely a lookback artifact.
-        </p>
+        <SectionHead
+          title="Signal robustness"
+          caption="Rolling z-score across 8 lookback windows at once, as a heat grid. A column hot all the way down is robust to window choice; one hot cell in a single row is a lookback artifact."
+        />
+        <ZHeatmap history={history} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -569,8 +569,8 @@ export default function QuantCard({
 }) {
   const [open, setOpen] = useState(false);
   const history = series.history;
-  const links = MARKET_LINKS[series.id];
-  const isRelevant = !assetFilter || (links?.some((l) => l.symbol === assetFilter) ?? false);
+  const impacts = IMPACTS[series.id] ?? [];
+  const isRelevant = !assetFilter || impacts.some((i) => i.symbol === assetFilter);
   if (!history || history.length < 20) {
     return <SeriesCard series={series} assetFilter={assetFilter} assetLabel={assetLabel} />;
   }
@@ -579,9 +579,9 @@ export default function QuantCard({
     return <NewsFeedCard series={series} />;
   }
 
-  const linkedMarkets = (links ?? [])
-    .map((link) => ({ link, market: markets.find((m) => m.id === `market:${link.symbol}`) }))
-    .filter((x): x is { link: (typeof links)[number]; market: MarketRow } => !!x.market);
+  const linkedMarkets = impacts
+    .map((impact) => ({ impact, market: markets.find((m) => m.id === marketRowId(impact.symbol)) }))
+    .filter((x): x is { impact: (typeof impacts)[number]; market: MarketRow } => !!x.market);
 
   const values = history.map((h) => h.value);
   const dist = computeDistStats(values);
@@ -590,7 +590,7 @@ export default function QuantCard({
   const config = getSignalConfig(series.id);
   const method: SignalMethod = config?.method ?? "positioning";
 
-  const bias = getBias(series.id, dist ? dist.zscore : null);
+  const bias = getBias(series.id, signal?.score ?? null);
   const biasToneColor = bias ? (bias.tone === "up" ? "var(--up)" : bias.tone === "down" ? "var(--down)" : "var(--text-faint)") : "var(--text-faint)";
   const chipTone = getDirectionTone(series.id, series.status);
 
@@ -656,8 +656,12 @@ export default function QuantCard({
 
           {linkedMarkets.length > 0 && (
             <div className="mt-3 flex flex-col gap-2">
-              {linkedMarkets.map(({ link, market }) => (
-                <MarketLink key={link.symbol} market={market} rationale={link.rationale} indicatorHistory={history} />
+              <SectionHead
+                title={`Impacts ${linkedMarkets.length} asset${linkedMarkets.length === 1 ? "" : "s"}`}
+                caption="Arrow = effect of this indicator printing HIGH vs its regime norm. These signed links are exactly what Net Bias aggregates."
+              />
+              {linkedMarkets.map(({ impact, market }) => (
+                <MarketLink key={impact.symbol} market={market} impact={impact} indicatorHistory={history} />
               ))}
             </div>
           )}

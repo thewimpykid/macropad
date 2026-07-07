@@ -85,8 +85,9 @@ function AssetSummaryCard({
       <div className="mt-3.5">
         <NetBiasGauge score={result.score} tone={result.tone} />
       </div>
-      <div className="mt-2 font-sans text-[0.72rem] text-[var(--text-faint)]">
-        {result.contributors.length} linked indicator{result.contributors.length === 1 ? "" : "s"}
+      <div className="mt-2 flex items-center justify-between font-sans text-[0.72rem] text-[var(--text-faint)]">
+        <span>{result.contributors.length} linked indicator{result.contributors.length === 1 ? "" : "s"}</span>
+        <span>{Math.round(result.conviction * 100)}% agree</span>
       </div>
     </button>
   );
@@ -158,6 +159,7 @@ const methodLabel: Record<BiasContributor["method"], string> = {
 };
 
 function ContributorRow({ c }: { c: BiasContributor }) {
+  const weightPct = Math.round(Math.min(1, c.weight) * 100);
   return (
     <div className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
       <div className="flex items-center gap-4">
@@ -182,34 +184,27 @@ function ContributorRow({ c }: { c: BiasContributor }) {
           <div className="mt-0.5 truncate font-sans text-[0.76rem]" style={{ color: toneColor(c.tone) }}>
             {c.label}
           </div>
+          <p className="m-0 mt-1 truncate font-sans text-[0.68rem] leading-snug text-[var(--text-faint)]" title={c.rationale}>
+            {c.rationale}
+          </p>
         </div>
         <div className="shrink-0 text-right font-mono">
           <div className="text-[0.8rem]" style={{ color: toneColor(c.tone) }}>
-            {c.score !== null ? `${c.score > 0 ? "+" : ""}${c.score.toFixed(2)}` : "—"}
+            {c.contribution > 0 ? "+" : ""}
+            {c.contribution.toFixed(2)}
           </div>
           <div className="mt-0.5 text-[0.66rem] text-[var(--text-faint)]">
             {c.correlation !== null ? `r=${c.correlation > 0 ? "+" : ""}${c.correlation.toFixed(2)}` : "r=n/a"}
           </div>
         </div>
       </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-3">
-        <div>
-          <div className="mb-0.5 flex justify-between font-sans text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">
-            <span>Cadence fit</span>
-            <span>{(c.cadenceWeight * 100).toFixed(0)}%</span>
-          </div>
-          <div className="h-1 rounded-full bg-[var(--border)]">
-            <div className="h-1 rounded-full" style={{ width: `${c.cadenceWeight * 100}%`, background: weightBarColor(c.cadenceWeight) }} />
-          </div>
+      <div className="mt-2.5">
+        <div className="mb-0.5 flex justify-between font-sans text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">
+          <span>Weight (impact salience × cadence fit × measured correlation)</span>
+          <span>{weightPct}%</span>
         </div>
-        <div>
-          <div className="mb-0.5 flex justify-between font-sans text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">
-            <span>Empirical correlation</span>
-            <span>{(c.correlationWeight * 100).toFixed(0)}%</span>
-          </div>
-          <div className="h-1 rounded-full bg-[var(--border)]">
-            <div className="h-1 rounded-full" style={{ width: `${c.correlationWeight * 100}%`, background: weightBarColor(c.correlationWeight) }} />
-          </div>
+        <div className="h-1 rounded-full bg-[var(--border)]">
+          <div className="h-1 rounded-full" style={{ width: `${weightPct}%`, background: weightBarColor(c.weight) }} />
         </div>
       </div>
     </div>
@@ -438,16 +433,19 @@ export default function NetBiasPage({
               </div>
             )}
           </div>
-          <span
-            className="rounded-full border px-3.5 py-1.5 text-[0.82rem] font-bold uppercase tracking-wide"
-            style={{
-              color: toneColor(result.tone),
-              borderColor: `color-mix(in srgb, ${toneColor(result.tone)} 40%, var(--border))`,
-              background: `color-mix(in srgb, ${toneColor(result.tone)} 12%, transparent)`,
-            }}
-          >
-            {result.verdict}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className="rounded-full border px-3.5 py-1.5 text-[0.82rem] font-bold uppercase tracking-wide"
+              style={{
+                color: toneColor(result.tone),
+                borderColor: `color-mix(in srgb, ${toneColor(result.tone)} 40%, var(--border))`,
+                background: `color-mix(in srgb, ${toneColor(result.tone)} 12%, transparent)`,
+              }}
+            >
+              {result.verdict}
+            </span>
+            <span className="font-mono text-[0.68rem] text-[var(--text-faint)]">{Math.round(result.conviction * 100)}% agreement</span>
+          </div>
         </div>
 
         <div className="mt-5">

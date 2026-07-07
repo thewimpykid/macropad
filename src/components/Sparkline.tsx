@@ -5,7 +5,7 @@ import { AreaChart, Area, ResponsiveContainer, YAxis } from "recharts";
 export default function Sparkline({
   data,
   tone,
-  heightClass = "h-14",
+  heightClass = "h-12",
 }: {
   data: number[];
   tone: "up" | "down" | "flat" | "pending";
@@ -21,20 +21,15 @@ export default function Sparkline({
   return (
     <div className={`${heightClass} w-full`}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={points} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
-          <defs>
-            <linearGradient id={`spark-${color}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
+        <AreaChart data={points} margin={{ top: 3, right: 1, bottom: 1, left: 1 }}>
           <YAxis domain={[min - pad, max + pad]} hide />
           <Area
             type="monotone"
             dataKey="v"
             stroke={color}
-            strokeWidth={1.75}
-            fill={`url(#spark-${color})`}
+            strokeWidth={1.5}
+            fill={color}
+            fillOpacity={0.07}
             dot={false}
             activeDot={false}
             isAnimationActive={false}

@@ -51,6 +51,14 @@ const ICONS: Record<string, React.ReactNode> = {
       <circle cx="10" cy="15" r="1.3" />
     </>
   ),
+  "impact-matrix": (
+    <>
+      <rect x="3" y="3" width="14" height="14" rx="1.5" />
+      <path d="M3 8H17" />
+      <path d="M3 13H17" />
+      <path d="M9 3V17" />
+    </>
+  ),
 };
 
 export default function PanelIcon({

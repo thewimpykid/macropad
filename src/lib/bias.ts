@@ -1,9 +1,9 @@
 export interface BiasConfig {
   /** What this indicator actually measures and why a trader watches it. */
   context: string;
-  /** Read when the trailing z-score is high (rising / elevated vs its own history). */
+  /** Read when the regime signal is high (rising / elevated vs the current regime). */
   high: { label: string; tone: "up" | "down" };
-  /** Read when the trailing z-score is low (falling / depressed vs its own history). */
+  /** Read when the regime signal is low (falling / depressed vs the current regime). */
   low: { label: string; tone: "up" | "down" };
   /** Read near zero. */
   neutral: string;
@@ -29,7 +29,7 @@ const CONFIG: Record<string, BiasConfig> = {
       "High yield spreads are the market's own fear gauge for corporate default risk. Widening spreads front-run equity drawdowns; compressing spreads confirm a risk-on credit backdrop and cheap financing for leveraged names.",
     high: { label: "Credit stress rising — risk-off", tone: "down" },
     low: { label: "Spreads compressed — risk-on, easy credit", tone: "up" },
-    neutral: "Credit spreads near their trailing average — no stress signal.",
+    neutral: "Credit spreads near their regime average — no stress signal.",
   },
   "us-macro:cpi-yoy": {
     context:
@@ -64,7 +64,7 @@ const CONFIG: Record<string, BiasConfig> = {
       "The 10y yield is the risk-free discount rate for every long-duration asset — equities, real estate, growth stocks. Rising yields tighten financial conditions and compress valuation multiples; falling yields ease conditions and support duration-sensitive assets.",
     high: { label: "Yields elevated — tightening financial conditions", tone: "down" },
     low: { label: "Yields low — easier financial conditions", tone: "up" },
-    neutral: "10y yield near its trailing range.",
+    neutral: "10y yield near its regime range.",
   },
   "us-macro:industrial-production": {
     context:
@@ -78,70 +78,42 @@ const CONFIG: Record<string, BiasConfig> = {
       "U. Michigan sentiment is a leading indicator for consumer spending, which is ~68% of US GDP. Sharp drops often precede pullbacks in discretionary spending before it shows up in hard data.",
     high: { label: "Consumer optimism elevated — spending tailwind", tone: "up" },
     low: { label: "Sentiment depressed — spending risk", tone: "down" },
-    neutral: "Consumer sentiment near its trailing average.",
-  },
-  "us-macro:core-pce": {
-    context:
-      "Core PCE is the Fed's actual stated inflation target metric — not CPI. It weights spending categories differently (accounts for substitution) and tends to run cooler than CPI. This is the number FOMC statements reference directly.",
-    high: { label: "Fed's own inflation gauge running hot — hawkish", tone: "down" },
-    low: { label: "Fed's own inflation gauge cooling — dovish room", tone: "up" },
-    neutral: "Core PCE tracking close to trend.",
-  },
-  "us-macro:core-cpi": {
-    context:
-      "Core CPI strips out volatile food & energy to show underlying price trend. The Fed and markets weight this more than headline CPI for policy signal, since headline gets whipsawed by gas prices.",
-    high: { label: "Underlying inflation hot — hawkish pressure", tone: "down" },
-    low: { label: "Underlying inflation cooling — dovish room", tone: "up" },
-    neutral: "Core CPI tracking close to trend.",
-  },
-  "us-macro:jobless-claims": {
-    context:
-      "Initial claims is the highest-frequency real-time labor market read available — weekly, not monthly, and rarely revised. A sustained rise is one of the earliest hard-data recession tells, often visible weeks before payrolls or unemployment confirm it.",
-    high: { label: "Claims rising — labor market cracking", tone: "down" },
-    low: { label: "Claims low — labor market still tight", tone: "up" },
-    neutral: "Claims tracking near their trailing range.",
-  },
-  "us-macro:gdp": {
-    context:
-      "Real GDP growth is the single headline growth number — everything else (payrolls, industrial production, retail sales) is effectively a higher-frequency proxy for this quarterly print.",
-    high: { label: "Growth running hot", tone: "up" },
-    low: { label: "Growth slowing or contracting", tone: "down" },
-    neutral: "GDP growth near its trailing trend.",
-  },
-  "us-macro:reverse-repo": {
-    context:
-      "The ON RRP facility is where money market funds park cash directly with the Fed when nothing else offers a better rate. Elevated usage means liquidity is sitting idle rather than flowing into risk assets or bank reserves; a sustained drain (as in 2023-24) has coincided with that cash finding its way into other short-term instruments and markets.",
-    high: { label: "Cash parked at Fed — liquidity sidelined", tone: "down" },
-    low: { label: "RRP draining — liquidity finding its way elsewhere", tone: "up" },
-    neutral: "RRP balance roughly stable.",
-  },
-  "us-macro:retail-sales": {
-    context:
-      "Retail sales is hard data on actual consumer spending, not just sentiment about it — the real-economy confirmation (or contradiction) of what consumer sentiment surveys are implying.",
-    high: { label: "Consumer spending strong", tone: "up" },
-    low: { label: "Consumer spending weakening", tone: "down" },
-    neutral: "Retail sales growth near trend.",
-  },
-  "us-macro:housing-starts": {
-    context:
-      "Housing is one of the most rate-sensitive and cyclically-leading sectors in the economy — starts typically turn before the broader cycle does, in both directions, making this a genuine leading indicator rather than a coincident one.",
-    high: { label: "Housing activity strong — cyclical tailwind", tone: "up" },
-    low: { label: "Housing activity weak — cyclical warning", tone: "down" },
-    neutral: "Housing starts near their trailing trend.",
+    neutral: "Consumer sentiment near its regime average.",
   },
   "yield-rates:10y2y-spread": {
     context:
       "The 2s10s curve is the most-watched recession signal on the desk. Deep inversion means the market expects the Fed to cut aggressively; the re-steepening (un-inversion) that follows has historically been the sharper timing signal for the actual downturn.",
     high: { label: "Curve steepening — normalizing growth outlook", tone: "up" },
     low: { label: "Curve inverted/flattening — recession signal", tone: "down" },
-    neutral: "Curve roughly flat, near its recent range.",
+    neutral: "Curve holding its recent shape.",
   },
-  "yield-rates:10y-cot": {
+  "yield-rates:10y3m-spread": {
     context:
-      "Net speculative positioning in 10y futures shows how leveraged funds are leaning. Extreme net-short positioning has historically preceded short squeezes and sharp yield drops when the crowded trade unwinds.",
-    high: { label: "Spec positioning net long — bullish duration bet", tone: "up" },
-    low: { label: "Spec positioning net short — crowded, squeeze risk", tone: "down" },
-    neutral: "Positioning roughly balanced.",
+      "The NY Fed's own recession probability model is built on this spread, not 2s10s — historically fewer false positives. Inversion means short-term bills yield more than the 10y, an unambiguous market signal the Fed will need to cut.",
+    high: { label: "Curve steepening — normalizing outlook", tone: "up" },
+    low: { label: "Curve inverted — NY Fed recession signal active", tone: "down" },
+    neutral: "Spread holding its recent range.",
+  },
+  "yield-rates:2y-yield": {
+    context:
+      "The 2y yield is almost pure Fed-path pricing — it moves on rate expectations more than growth or inflation news directly. Rising 2y = market pricing a more hawkish Fed; falling = pricing cuts.",
+    high: { label: "Front end pricing hawkish Fed path", tone: "down" },
+    low: { label: "Front end pricing dovish Fed path / cuts", tone: "up" },
+    neutral: "2y yield near its regime range.",
+  },
+  "yield-rates:10y-yield": {
+    context:
+      "The 10y yield is the risk-free discount rate for every long-duration asset. Rising yields tighten financial conditions and compress valuation multiples; falling yields ease conditions and support duration-sensitive assets.",
+    high: { label: "Yields elevated — tightening financial conditions", tone: "down" },
+    low: { label: "Yields low — easier financial conditions", tone: "up" },
+    neutral: "10y yield near its regime range.",
+  },
+  "yield-rates:30y-yield": {
+    context:
+      "The 30y is the most term-premium and fiscal-sensitive point on the curve — it reacts to deficit/issuance concerns independent of Fed policy. A rising 30y with a stable Fed path is a term-premium story, not a growth one.",
+    high: { label: "Long-bond yields elevated — term premium/fiscal pressure", tone: "down" },
+    low: { label: "Long-bond yields low — term premium compressed", tone: "up" },
+    neutral: "30y yield near its regime range.",
   },
   "yield-rates:breakeven": {
     context:
@@ -150,41 +122,6 @@ const CONFIG: Record<string, BiasConfig> = {
     low: { label: "Inflation expectations falling — dovish room", tone: "up" },
     neutral: "Inflation expectations anchored near trend.",
   },
-  "yield-rates:10y3m-spread": {
-    context:
-      "The NY Fed's own recession probability model is built on this spread, not 2s10s — historically fewer false positives. Inversion means short-term bills yield more than the 10y, an unambiguous market signal the Fed will need to cut.",
-    high: { label: "Curve steepening — normalizing outlook", tone: "up" },
-    low: { label: "Curve inverted — NY Fed recession signal active", tone: "down" },
-    neutral: "Spread near its recent range.",
-  },
-  "yield-rates:2y-yield": {
-    context:
-      "The 2y yield is almost pure Fed-path pricing — it moves on rate expectations more than growth or inflation news directly. Rising 2y = market pricing a more hawkish Fed; falling = pricing cuts.",
-    high: { label: "Front end pricing hawkish Fed path", tone: "down" },
-    low: { label: "Front end pricing dovish Fed path / cuts", tone: "up" },
-    neutral: "2y yield near its recent range.",
-  },
-  "yield-rates:10y-yield": {
-    context:
-      "The 10y yield is the risk-free discount rate for every long-duration asset. Rising yields tighten financial conditions and compress valuation multiples; falling yields ease conditions and support duration-sensitive assets.",
-    high: { label: "Yields elevated — tightening financial conditions", tone: "down" },
-    low: { label: "Yields low — easier financial conditions", tone: "up" },
-    neutral: "10y yield near its recent range.",
-  },
-  "yield-rates:30y-yield": {
-    context:
-      "The 30y is the most term-premium and fiscal-sensitive point on the curve — it reacts to deficit/issuance concerns independent of Fed policy. A rising 30y with a stable Fed path is a term-premium story, not a growth one.",
-    high: { label: "Long-bond yields elevated — term premium/fiscal pressure", tone: "down" },
-    low: { label: "Long-bond yields low — term premium compressed", tone: "up" },
-    neutral: "30y yield near its recent range.",
-  },
-  "yield-rates:2y-cot": {
-    context:
-      "Front-end futures positioning shows how leveraged funds are betting on the near-term Fed path specifically, distinct from the 10y's growth/inflation mix. Crowded positioning here has driven some of the sharpest short-squeeze moves in rates.",
-    high: { label: "Front-end spec positioning net long", tone: "up" },
-    low: { label: "Front-end spec positioning net short — squeeze risk", tone: "down" },
-    neutral: "Front-end positioning roughly balanced.",
-  },
   "yield-rates:forward-inflation": {
     context:
       "5y5y forward inflation is the metric the Fed itself watches most for long-run inflation anchoring — it strips out near-term noise to show what the market believes inflation will average five years from now, for five years.",
@@ -192,124 +129,246 @@ const CONFIG: Record<string, BiasConfig> = {
     low: { label: "Long-run inflation expectations well-anchored/falling", tone: "up" },
     neutral: "Long-run inflation expectations stable near target.",
   },
+  "yield-rates:10y-cot": {
+    context:
+      "Net speculative positioning in 10y futures shows how leveraged funds are leaning. Extreme net-short positioning has historically preceded short squeezes and sharp yield drops when the crowded trade unwinds.",
+    high: { label: "Specs net long duration — consensus bets on lower yields", tone: "up" },
+    low: { label: "Specs net short duration — crowded, squeeze risk", tone: "down" },
+    neutral: "10y positioning roughly balanced.",
+  },
+  "yield-rates:2y-cot": {
+    context:
+      "Front-end futures positioning shows how leveraged funds are betting on the near-term Fed path specifically, distinct from the 10y's growth/inflation mix. Crowded positioning here has driven some of the sharpest short-squeeze moves in rates.",
+    high: { label: "Specs net long the front end", tone: "up" },
+    low: { label: "Specs net short the front end — squeeze risk", tone: "down" },
+    neutral: "Front-end positioning roughly balanced.",
+  },
+  "us-macro:core-cpi": {
+    context:
+      "Core CPI strips food and energy to show underlying inflation — the part the Fed believes it can actually influence. Stickier than headline, and the number that determines whether cuts are defensible.",
+    high: { label: "Core inflation above target — hawkish", tone: "down" },
+    low: { label: "Core inflation at/below target — dovish room", tone: "up" },
+    neutral: "Core CPI tracking near the 2% target.",
+  },
+  "us-macro:core-pce": {
+    context:
+      "Core PCE is the Fed's actual target metric — the 2% goal is defined on this series, not CPI. Every dot-plot and every cut decision is framed against this number.",
+    high: { label: "Core PCE above the Fed's target — hawkish", tone: "down" },
+    low: { label: "Core PCE at/below target — cuts defensible", tone: "up" },
+    neutral: "Core PCE tracking near the 2% target.",
+  },
+  "us-macro:jobless-claims": {
+    context:
+      "Initial jobless claims are the highest-frequency hard labor data that exists — weekly, nearly unrevised. A sustained rising trend is the earliest hard-data signal of a labor-market turn, well before the unemployment rate moves.",
+    high: { label: "Claims trending up — labor market cracking", tone: "down" },
+    low: { label: "Claims trending down — labor market solid", tone: "up" },
+    neutral: "Claims flat near their recent trend.",
+  },
+  "us-macro:gdp": {
+    context:
+      "Real GDP growth vs the ~2% trend/potential rate. Above-trend growth supports earnings but keeps the Fed cautious; below-trend is the recession-risk zone.",
+    high: { label: "Growth above trend — expansion intact", tone: "up" },
+    low: { label: "Growth below trend — stall risk", tone: "down" },
+    neutral: "Growth tracking near trend.",
+  },
+  "us-macro:reverse-repo": {
+    context:
+      "The Fed's reverse repo facility is where excess liquidity parks. Rising RRP drains liquidity from markets; falling RRP releases it back — RRP drawdown funded much of the 2023-24 rally while QT ran.",
+    high: { label: "Liquidity parking at the Fed — drain", tone: "down" },
+    low: { label: "RRP draining — liquidity releasing into markets", tone: "up" },
+    neutral: "RRP balance roughly stable.",
+  },
+  "us-macro:retail-sales": {
+    context:
+      "Retail sales is the hard-data confirmation of the consumer story — sentiment says what people feel, this says what they spent. Nominal, so judge against ~3% trend (real growth plus inflation).",
+    high: { label: "Consumer spending above trend", tone: "up" },
+    low: { label: "Consumer spending stalling", tone: "down" },
+    neutral: "Spending growth near trend.",
+  },
+  "us-macro:housing-starts": {
+    context:
+      "Housing is the most rate-sensitive sector of the economy — starts respond to mortgage rates within months and lead the broader cycle. \"Housing is the business cycle\" (Leamer).",
+    high: { label: "Housing activity expanding — rate transmission easing", tone: "up" },
+    low: { label: "Housing contracting — rate pain landing", tone: "down" },
+    neutral: "Housing activity flat YoY.",
+  },
+  // --- COT positioning ---
   "cot:es": {
     context:
-      "Net speculative positioning in S&P 500 futures. Extreme net-long crowding has historically preceded sharp pullbacks when longs are forced to unwind; extreme net-short has preceded squeezes.",
-    high: { label: "Spec positioning net long — crowded, pullback risk", tone: "down" },
-    low: { label: "Spec positioning net short — squeeze risk on rallies", tone: "up" },
-    neutral: "Equity futures positioning roughly balanced.",
+      "Non-commercial (spec) net position in E-mini S&P 500 futures. Mid-range moves are trend-confirming consensus; extremes (COT index near 0 or 100) mark crowded trades that unwind violently.",
+    high: { label: "Specs net long equities — bullish consensus", tone: "up" },
+    low: { label: "Specs net short equities — bearish consensus / squeeze fuel", tone: "down" },
+    neutral: "ES positioning near its regime average.",
   },
   "cot:nq": {
     context:
-      "Net speculative positioning in Nasdaq-100 futures — the higher-beta, more crowded-trade cousin of ES. Positioning extremes here tend to be sharper and unwind faster than the broader index.",
-    high: { label: "Spec positioning net long — crowded, pullback risk", tone: "down" },
-    low: { label: "Spec positioning net short — squeeze risk on rallies", tone: "up" },
-    neutral: "Nasdaq futures positioning roughly balanced.",
+      "Spec net position in Nasdaq-100 futures — the leveraged consensus on tech specifically. Divergence from ES positioning flags rotation between tech and the broad market.",
+    high: { label: "Specs net long tech", tone: "up" },
+    low: { label: "Specs net short tech", tone: "down" },
+    neutral: "NQ positioning near its regime average.",
   },
-  "cot:treasury": {
+  "cot:zn": {
     context:
-      "Combined 10y+2y speculative positioning shows how leveraged funds are leaning across the belly of the curve. Crowded net-short duration bets have driven some of the sharpest rate rallies when forced to cover.",
-    high: { label: "Duration positioning net long", tone: "up" },
-    low: { label: "Duration positioning net short — squeeze risk", tone: "down" },
-    neutral: "Treasury futures positioning roughly balanced.",
+      "Spec net position in 10y Treasury note futures — the same duration trade as TLT, levered. The record net shorts of 2023 preceded one of the sharpest bond rallies on record when they covered.",
+    high: { label: "Specs net long duration", tone: "up" },
+    low: { label: "Specs net short duration — squeeze fuel", tone: "down" },
+    neutral: "10y positioning near its regime average.",
   },
-  "cot:commodities-dxy": {
+  "cot:zt": {
     context:
-      "Net speculative positioning in the Dollar Index itself. Crowded net-long dollar positioning has historically preceded dollar corrections as the trade gets stretched; net-short has preceded squeezes.",
-    high: { label: "Dollar positioning net long — crowded", tone: "down" },
-    low: { label: "Dollar positioning net short — squeeze risk on dollar", tone: "up" },
-    neutral: "Dollar futures positioning roughly balanced.",
+      "Spec net position in 2y Treasury note futures — a leveraged bet on the near-term Fed path. Basis-trade mechanics keep structural shorts here, so read changes rather than the level.",
+    high: { label: "Specs adding front-end length", tone: "up" },
+    low: { label: "Specs pressing front-end shorts", tone: "down" },
+    neutral: "2y positioning near its regime average.",
+  },
+  "cot:dxy": {
+    context:
+      "Spec net position in ICE Dollar Index futures. A small market, but the cleanest single read on how fast money is leaning on the dollar.",
+    high: { label: "Specs net long the dollar", tone: "up" },
+    low: { label: "Specs net short the dollar", tone: "down" },
+    neutral: "Dollar positioning near its regime average.",
   },
   "cot:gold": {
     context:
-      "Net speculative positioning in gold futures. Extreme net-long crowding often precedes consolidation or pullbacks even in a structural bull market; positioning resets are healthy, extremes without resets are not.",
-    high: { label: "Gold positioning net long — crowded", tone: "down" },
-    low: { label: "Gold positioning net short — room to run higher", tone: "up" },
-    neutral: "Gold futures positioning roughly balanced.",
+      "Spec net position in COMEX gold. Managed-money length is the marginal bid in gold — rallies without positioning support tend to fade, and extreme length precedes flushes.",
+    high: { label: "Specs net long gold", tone: "up" },
+    low: { label: "Spec gold length washed out", tone: "down" },
+    neutral: "Gold positioning near its regime average.",
   },
-  "cot:crude": {
+  "cot:wti": {
     context:
-      "Net speculative positioning in WTI futures. Extreme net-long positioning has historically coincided with price tops (everyone already bought); extreme net-short with capitulation bottoms.",
-    high: { label: "Crude positioning net long — crowded", tone: "down" },
-    low: { label: "Crude positioning net short — capitulation zone", tone: "up" },
-    neutral: "Crude futures positioning roughly balanced.",
+      "Spec net position in NYMEX WTI. Crude is the most positioning-driven major commodity — spec flows amplify every supply headline.",
+    high: { label: "Specs net long crude", tone: "up" },
+    low: { label: "Spec crude length washed out", tone: "down" },
+    neutral: "Crude positioning near its regime average.",
+  },
+  "cot:copper": {
+    context:
+      "Spec net position in COMEX copper — the fast-money overlay on the world's most cyclical industrial metal.",
+    high: { label: "Specs net long copper", tone: "up" },
+    low: { label: "Specs net short copper", tone: "down" },
+    neutral: "Copper positioning near its regime average.",
+  },
+  "cot:vix": {
+    context:
+      "Spec net position in VIX futures. Specs are structurally net short (harvesting the vol risk premium) — positioning moving toward net long means hedging demand is building into stress.",
+    high: { label: "Vol hedging demand building", tone: "down" },
+    low: { label: "Vol sellers fully loaded — complacency", tone: "up" },
+    neutral: "VIX positioning at its structural norm.",
   },
   "cot:silver": {
     context:
-      "Net speculative positioning in silver futures. A much thinner market than gold — positioning extremes here have produced some of the sharpest squeezes and unwinds in commodities.",
-    high: { label: "Silver positioning net long — crowded, thin market", tone: "down" },
-    low: { label: "Silver positioning net short — squeeze risk", tone: "up" },
-    neutral: "Silver futures positioning roughly balanced.",
+      "Spec net position in COMEX silver — a thinner market than gold, so positioning swings amplify price moves in both directions.",
+    high: { label: "Specs net long silver", tone: "up" },
+    low: { label: "Spec silver length washed out", tone: "down" },
+    neutral: "Silver positioning near its regime average.",
   },
-  "transmission:copper-crude": {
+  "cot:natgas": {
     context:
-      "Copper tracks global industrial demand; crude tracks energy costs and often geopolitical risk. A rising ratio means growth is outrunning energy costs — genuine expansion. A falling ratio can mean either energy shock or growth slowdown.",
-    high: { label: "Growth outrunning energy costs — expansionary", tone: "up" },
-    low: { label: "Energy costs outrunning growth — stagflationary risk", tone: "down" },
-    neutral: "Ratio near its trailing range.",
+      "Spec net position in NYMEX Henry Hub. Nat gas is the most volatile major commodity and specs are frequently caught wrong-footed — extremes here unwind violently (\"widowmaker\").",
+    high: { label: "Specs net long nat gas", tone: "up" },
+    low: { label: "Specs net short nat gas — squeeze fuel", tone: "down" },
+    neutral: "Nat gas positioning near its regime average.",
   },
-  "transmission:copper-gold": {
-    context:
-      "One of the cleanest real-time growth vs. fear proxies — copper wants growth, gold wants safety. This ratio has a strong historical lead relationship with the 10y yield.",
-    high: { label: "Risk-on — growth demand beating safe-haven demand", tone: "up" },
-    low: { label: "Risk-off — safe-haven demand beating growth demand", tone: "down" },
-    neutral: "Ratio near its trailing range.",
-  },
-  "transmission:gold-silver": {
-    context:
-      "Gold is pure monetary/safe-haven demand; silver has a real industrial-use component. A rising ratio (gold outperforming) signals fear-driven flows; a falling ratio signals industrial/reflationary demand picking up.",
-    high: { label: "Fear-driven flows dominating — gold favored over silver", tone: "down" },
-    low: { label: "Industrial/reflationary demand picking up", tone: "up" },
-    neutral: "Ratio near its trailing range.",
-  },
-  "transmission:crude-natgas": {
-    context:
-      "The relative price of oil to gas shifts with substitution economics. A collapsing ratio (nat gas cheap vs. crude) has historically coincided with weak industrial/heating demand — a soft-demand tell independent of the CPI energy print.",
-    high: { label: "Energy demand balanced — normal crude/gas relationship", tone: "up" },
-    low: { label: "Nat gas weak vs. crude — soft energy demand signal", tone: "down" },
-    neutral: "Ratio near its trailing range.",
-  },
-  "transmission:silver": {
-    context:
-      "Silver sits between a monetary hedge and an industrial input (solar, electronics). Its moves often lead or amplify gold's, making it a higher-beta read on the same macro forces.",
-    high: { label: "Silver strength — reflation / hedge demand building", tone: "up" },
-    low: { label: "Silver weakness — demand cooling", tone: "down" },
-    neutral: "Silver near its trailing range.",
-  },
-  "transmission:natgas": {
-    context:
-      "Natural gas is a direct read on energy demand and, seasonally, weather — it's noisier than crude but a genuine industrial/heating demand gauge independent of OPEC supply decisions.",
-    high: { label: "Nat gas strength — demand/weather-driven pressure", tone: "down" },
-    low: { label: "Nat gas weakness — soft demand", tone: "up" },
-    neutral: "Nat gas near its trailing range.",
-  },
-  "transmission:walcl": {
-    context:
-      "The Fed's balance sheet is the plumbing behind systemic dollar liquidity. Expansion (QE) supports risk assets; contraction (QT) drains liquidity and pressures valuations, especially long-duration and levered trades.",
-    high: { label: "Liquidity expanding", tone: "up" },
-    low: { label: "Liquidity draining (QT)", tone: "down" },
-    neutral: "Balance sheet roughly flat — liquidity impulse neutral.",
-  },
+  // --- Geopolitics / volatility complex ---
   "geo:vix": {
     context:
-      "VIX is the market's own fear gauge, priced off S&P 500 option skew. Spikes mark acute stress and are often (not always) tactical buying opportunities; sustained elevation without a spike is a slower, structural risk-off regime.",
-    high: { label: "Volatility elevated — fear/hedging demand up", tone: "down" },
-    low: { label: "Volatility compressed — complacency or genuine calm", tone: "up" },
-    neutral: "VIX near its trailing range.",
+      "The VIX is the market-implied 30-day volatility of the S&P 500 — the price of portfolio insurance. Sub-15 is a calm regime; sustained 25+ is a stress regime where drawdowns cluster.",
+    high: { label: "Implied vol elevated — stress regime", tone: "down" },
+    low: { label: "Implied vol suppressed — calm regime", tone: "up" },
+    neutral: "VIX in line with its recent regime.",
+  },
+  "geo:vix-term": {
+    context:
+      "VIX3M divided by VIX — the shape of the vol curve. Above 1 (contango) is the healthy carry regime; below 1 (backwardation) means near-term panic is priced above the future, which has marked every major drawdown low and onset.",
+    high: { label: "Vol curve in contango — calm regime", tone: "up" },
+    low: { label: "Vol curve flattening/inverted — acute stress", tone: "down" },
+    neutral: "Vol term structure in its normal shape.",
   },
   "geo:ovx": {
     context:
-      "OVX prices expected volatility in crude — it spikes on supply shocks (OPEC surprises, Middle East escalation) independent of the direction of oil itself. A spike is a geopolitical-risk tell even if price hasn't moved much yet.",
-    high: { label: "Oil vol elevated — supply-shock / geopolitical risk priced", tone: "down" },
-    low: { label: "Oil vol compressed — calm supply backdrop", tone: "up" },
-    neutral: "OVX near its trailing range.",
+      "OVX is the VIX of crude oil. It spikes on both supply shocks (wars, OPEC surprises) and demand crashes — a clean, tradable proxy for how much geopolitical risk energy markets are actually pricing, versus headlines.",
+    high: { label: "Oil vol elevated — supply/geopolitical risk priced", tone: "down" },
+    low: { label: "Oil vol calm — no supply fear priced", tone: "up" },
+    neutral: "Oil vol in its normal range.",
   },
   "geo:gvz": {
     context:
-      "GVZ prices expected volatility in gold. Spikes alongside rising gold prices confirm genuine safe-haven demand; spikes without a price move can mark indecision at a turning point.",
-    high: { label: "Gold vol elevated — safe-haven demand or turning point", tone: "down" },
-    low: { label: "Gold vol compressed — calm, range-bound gold", tone: "up" },
-    neutral: "GVZ near its trailing range.",
+      "GVZ is the VIX of gold. Elevated gold vol alongside a rising gold price signals genuine flight-to-safety flows; elevated vol with falling gold is usually forced liquidation.",
+    high: { label: "Gold vol elevated — safe-haven flows active", tone: "down" },
+    low: { label: "Gold vol calm", tone: "up" },
+    neutral: "Gold vol in its normal range.",
+  },
+  "geo:epu": {
+    context:
+      "The Economic Policy Uncertainty index counts newspaper coverage of policy uncertainty daily. It is noisy but quantifies the headline environment — elevated readings raise the equity risk premium and correlate with wider credit spreads.",
+    high: { label: "Policy uncertainty elevated", tone: "down" },
+    low: { label: "Policy environment quiet", tone: "up" },
+    neutral: "Policy uncertainty near its usual level.",
+  },
+  // --- Transmission ---
+  "transmission:nfci": {
+    context:
+      "The Chicago Fed's National Financial Conditions Index aggregates 105 measures of risk, credit and leverage into one weekly number. Zero = average conditions; positive = tighter than average. It is the single best summary of whether policy tightening is actually transmitting.",
+    high: { label: "Financial conditions tightening — policy is biting", tone: "down" },
+    low: { label: "Financial conditions loose — policy not restrictive in practice", tone: "up" },
+    neutral: "Financial conditions near their long-run average.",
+  },
+  "transmission:real-10y": {
+    context:
+      "The 10y TIPS yield is the market's real (inflation-adjusted) risk-free rate — the true discount rate on long-duration assets and the dominant driver of gold. Positive and rising real yields are the tightening actually reaching the economy.",
+    high: { label: "Real yields elevated — genuine tightening", tone: "down" },
+    low: { label: "Real yields low/negative — easy money in real terms", tone: "up" },
+    neutral: "Real yields near their regime range.",
+  },
+  "transmission:broad-dollar": {
+    context:
+      "The Fed's trade-weighted broad dollar index. Dollar strength is global tightening — it squeezes EM dollar borrowers, pressures commodities, and drags on US multinational earnings. \"The dollar is the world's monetary policy.\"",
+    high: { label: "Dollar strong — global conditions tightening", tone: "down" },
+    low: { label: "Dollar weak — global easing impulse", tone: "up" },
+    neutral: "Dollar near its regime range.",
+  },
+  "transmission:copper-gold": {
+    context:
+      "Copper (growth demand) over gold (fear demand). The ratio tracks the 10y yield remarkably well — a rising ratio says real demand is beating fear, a falling one says defensiveness is winning regardless of what equities are doing.",
+    high: { label: "Growth demand beating fear — reflationary", tone: "up" },
+    low: { label: "Fear demand beating growth — defensive", tone: "down" },
+    neutral: "Growth/fear balance unchanged.",
+  },
+  "transmission:gold-silver": {
+    context:
+      "Gold priced in silver. A high ratio means fear demand (gold) is dominating industrial-monetary demand (silver); historically extreme readings have resolved through silver catching up rather than gold falling.",
+    high: { label: "Fear metal dominating — defensive tilt", tone: "down" },
+    low: { label: "Silver outperforming — reflationary tilt", tone: "up" },
+    neutral: "Gold/silver balance unchanged.",
+  },
+  "transmission:crude-natgas": {
+    context:
+      "Crude priced in natural gas — a rough global-vs-domestic energy demand split. Mostly a diagnostic for which energy market is under pressure rather than a directional macro signal.",
+    high: { label: "Crude rich vs gas — oil-side pressure priced", tone: "down" },
+    low: { label: "Gas rich vs crude — domestic gas squeeze", tone: "up" },
+    neutral: "Energy complex balance unchanged.",
+  },
+  "transmission:hyg-lqd": {
+    context:
+      "High-yield bonds relative to investment-grade. When junk outperforms, credit investors are reaching for risk; when it lags while equities rally, credit is quietly refusing to confirm — historically a warning.",
+    high: { label: "Credit risk appetite on — junk outperforming", tone: "up" },
+    low: { label: "Credit risk appetite off — quality outperforming", tone: "down" },
+    neutral: "Credit risk appetite unchanged.",
+  },
+  "transmission:rsp-spy": {
+    context:
+      "Equal-weight S&P over cap-weight — pure market breadth. Rising means the average stock participates; falling means a handful of megacaps carry the index, which has historically preceded fragility.",
+    high: { label: "Breadth healthy — broad participation", tone: "up" },
+    low: { label: "Breadth narrowing — megacap-dependent tape", tone: "down" },
+    neutral: "Breadth steady.",
+  },
+  "transmission:smh-spy": {
+    context:
+      "Semiconductors relative to the S&P 500. Semis lead the cycle in both directions — leadership confirms risk appetite in the market's highest-beta growth complex; breakdown warns the cycle trade is rolling.",
+    high: { label: "Semis leading — cycle risk appetite confirmed", tone: "up" },
+    low: { label: "Semis lagging — cycle leadership rolling over", tone: "down" },
+    neutral: "Semi leadership unchanged.",
   },
 };
 
@@ -317,19 +376,24 @@ export interface Bias {
   context: string;
   label: string;
   tone: "up" | "down" | "flat";
-  strength: "mild" | "strong" | null;
+  strength: "mild" | "strong" | "extreme" | null;
 }
 
-export function getBias(seriesId: string, zscore: number | null): Bias | null {
+/**
+ * `score` is the method-based indicator signal, bounded -1..1 (see
+ * indicatorSignal.ts — positioning / momentum / anchor / threshold, whichever
+ * fits the series). Bands: ±0.15 neutral, ±0.5 strong, ±0.8 extreme.
+ */
+export function getBias(seriesId: string, score: number | null): Bias | null {
   const cfg = CONFIG[seriesId];
   if (!cfg) return null;
-  if (zscore === null) return { context: cfg.context, label: "Insufficient history for a read", tone: "flat", strength: null };
+  if (score === null) return { context: cfg.context, label: "Insufficient history for a read", tone: "flat", strength: null };
 
-  const abs = Math.abs(zscore);
-  if (abs < 0.5) return { context: cfg.context, label: cfg.neutral, tone: "flat", strength: null };
+  const abs = Math.abs(score);
+  if (abs < 0.15) return { context: cfg.context, label: cfg.neutral, tone: "flat", strength: null };
 
-  const strength = abs >= 1.5 ? "strong" : "mild";
-  const side = zscore > 0 ? cfg.high : cfg.low;
+  const strength = abs >= 0.8 ? "extreme" : abs >= 0.5 ? "strong" : "mild";
+  const side = score > 0 ? cfg.high : cfg.low;
   return { context: cfg.context, label: side.label, tone: side.tone, strength };
 }
 
@@ -353,7 +417,7 @@ export function getDirectionTone(
 
 /**
  * Same good/bad remapping as getDirectionTone, but for any signed number
- * (z-score, momentum delta) rather than the literal status chip. Positive
+ * (signal, momentum delta) rather than the literal status chip. Positive
  * numbers use the indicator's "high" tone, negative use "low" — falls back
  * to literal (positive=up) for series with no bias config.
  */

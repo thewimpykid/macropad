@@ -398,43 +398,12 @@ export function avgChangeHistory(levelHist: HistPoint[], months: number): HistPo
   return out;
 }
 
-/** Elementwise a-b, aligning b onto a's dates by nearest match within toleranceDays. */
-export function subtractHistory(a: HistPoint[], b: HistPoint[], toleranceDays = 3): HistPoint[] {
-  const bByTime = b.map((p) => ({ t: new Date(p.date).getTime(), v: p.value })).sort((x, y) => x.t - y.t);
-  const out: HistPoint[] = [];
-  for (const pt of a) {
-    const t = new Date(pt.date).getTime();
-    let best: { t: number; v: number } | null = null;
-    let bestDiff = Infinity;
-    for (const bp of bByTime) {
-      const diff = Math.abs(bp.t - t);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = bp;
-      }
-      if (bp.t > t && diff > bestDiff) break;
-    }
-    if (best && bestDiff <= toleranceDays * 86_400_000) {
-      out.push({ date: pt.date, value: pt.value - best.v });
-    }
-  }
-  return out;
-}
-
 function median(sorted: number[]): number {
-  const n = sorted.length;
-  const mid = Math.floor(n / 2);
-  return n % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-/**
- * Robust z-score: (latest - median) / (1.4826 * MAD), instead of
- * (latest - mean) / std. Median/MAD is far less distorted by the fat tails
- * and occasional extreme prints common in macro data (a single COT spike or
- * a 2020-style outlier shouldn't blow out the "normal" baseline the way it
- * does with mean/std). 1.4826 is the standard scale factor that makes MAD
- * comparable to std under a normal distribution.
- */
+/** Median/MAD z-score of the latest value — outliers and fat tails don't dominate the way mean/std lets them. */
 export function robustZScore(values: number[]): number | null {
   if (values.length < 5) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -477,12 +446,10 @@ export interface WindowedBias {
 }
 
 /**
- * The core fix over a naive full-history mean/std z-score: (1) uses only a
+ * Positioning-style read for genuinely mean-reverting series: (1) only a
  * trailing ~2y window so a decade-old regime doesn't distort what "normal"
- * means today for a non-stationary series (WALCL, unemployment, etc.), and
- * (2) is robust-statistic based (median/MAD) with a non-parametric
- * percentile-rank cross-check blended in, so outliers and fat tails don't
- * dominate the read the way a mean/std z-score does.
+ * means today, and (2) robust statistics (median/MAD) with a non-parametric
+ * percentile-rank cross-check blended in.
  */
 export function computeWindowedBias(historyValues: number[], cadence: Cadence): WindowedBias {
   const window = historyValues.slice(-windowSizeForCadence(cadence));
@@ -495,43 +462,73 @@ export function computeWindowedBias(historyValues: number[], cadence: Cadence): 
   return { robustZ, percentile, blended };
 }
 
-function mean(values: number[]): number {
-  return values.reduce((a, b) => a + b, 0) / values.length;
-}
-
-function stdDev(values: number[]): number {
-  const m = mean(values);
-  return Math.sqrt(values.reduce((a, b) => a + (b - m) ** 2, 0) / values.length);
-}
-
 /**
  * For indicators where the LEVEL is arbitrary/structurally-shifting but the
- * TREND is the actual signal — payrolls, WALCL pace, claims, M2, yields as a
- * financial-conditions read. Compares the average of the most recent
- * `window` observations against the average of the `window` before that,
- * normalized by the series' own period-over-period volatility (so a "big"
- * move means something different for a low-vol series like a policy rate
- * vs. a high-vol one like weekly claims).
+ * TREND is the signal — payrolls, WALCL pace, claims, M2, yields as a
+ * financial-conditions read. Compares the mean of the most recent `window`
+ * observations against the mean of the `window` before that, normalized by
+ * the series' own period-over-period volatility.
  */
 export function momentumSignal(values: number[], window: number): number | null {
   if (values.length < window * 2) return null;
   const recent = values.slice(-window);
   const prior = values.slice(-window * 2, -window);
-  const change = mean(recent) - mean(prior);
+  const avg = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+  const change = avg(recent) - avg(prior);
   const diffs: number[] = [];
   for (let i = 1; i < values.length; i++) diffs.push(values[i] - values[i - 1]);
-  const diffStd = stdDev(diffs) || 1;
+  const diffMean = avg(diffs);
+  const diffStd = Math.sqrt(diffs.reduce((a, b) => a + (b - diffMean) ** 2, 0) / diffs.length) || 1;
   const raw = change / (diffStd * Math.sqrt(window));
   return Math.max(-1, Math.min(1, raw / 2));
 }
 
 /**
- * For indicators with a real economic reference point — inflation vs. the
- * Fed's 2% target, unemployment vs. NAIRU, a spread vs. its 0 inversion
- * line. `band` sets how many units away from `reference` counts as a "full"
- * ±1 read (e.g. inflation: reference=2, band=1 means 3% inflation reads as
- * +1, not "however many standard deviations that happens to be").
+ * For indicators with a real economic reference point — inflation vs the
+ * Fed's 2% target, unemployment vs NAIRU, a spread vs its 0 inversion line.
+ * `band` sets how far from `reference` counts as a "full" ±1 read.
  */
 export function distanceSignal(latest: number, reference: number, band: number): number {
   return Math.max(-1, Math.min(1, (latest - reference) / band));
+}
+
+/**
+ * Pearson correlation of period-over-period CHANGES between two date-aligned
+ * series. Raw levels of any two trending series correlate spuriously (~0.9
+ * for a growing payroll level vs a rising index, regardless of any real
+ * relationship) — differencing first is what makes the measured correlation
+ * mean something.
+ */
+export function changeCorrelation(
+  a: { date: string; value: number }[],
+  b: { date: string; value: number }[],
+  toleranceDays = 6
+): number | null {
+  const aligned = alignByDate(a, b, toleranceDays);
+  if (aligned.a.length < 9) return null;
+  const diff = (v: number[]) => v.slice(1).map((x, i) => x - v[i]);
+  return pearson(diff(aligned.a), diff(aligned.b));
+}
+
+/** Elementwise a-b, aligning b onto a's dates by nearest match within toleranceDays. */
+export function subtractHistory(a: HistPoint[], b: HistPoint[], toleranceDays = 3): HistPoint[] {
+  const bByTime = b.map((p) => ({ t: new Date(p.date).getTime(), v: p.value })).sort((x, y) => x.t - y.t);
+  const out: HistPoint[] = [];
+  for (const pt of a) {
+    const t = new Date(pt.date).getTime();
+    let best: { t: number; v: number } | null = null;
+    let bestDiff = Infinity;
+    for (const bp of bByTime) {
+      const diff = Math.abs(bp.t - t);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = bp;
+      }
+      if (bp.t > t && diff > bestDiff) break;
+    }
+    if (best && bestDiff <= toleranceDays * 86_400_000) {
+      out.push({ date: pt.date, value: pt.value - best.v });
+    }
+  }
+  return out;
 }

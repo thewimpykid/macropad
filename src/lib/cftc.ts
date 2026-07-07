@@ -1,16 +1,49 @@
 const BASE = "https://publicreporting.cftc.gov/resource/6dca-aqww.json";
 
+/**
+ * CFTC legacy futures-only COT, queried by contract market code — NOT display
+ * name. The commission renames contracts ("10-YEAR U.S. TREASURY NOTES" became
+ * "UST 10Y NOTE", "U.S. DOLLAR INDEX" became "USD INDEX", the NQ e-mini became
+ * "NASDAQ MINI"), and a name-based query silently returns nothing after a
+ * rename. Codes are stable across the full history.
+ */
+export const COT_CODES = {
+  ES: "13874A",
+  NQ: "209742",
+  UST_10Y: "043602",
+  UST_2Y: "042601",
+  DXY: "098662",
+  GOLD: "088691",
+  WTI: "067651",
+  COPPER: "085692",
+  SILVER: "084691",
+  NATGAS: "023651",
+  VIX: "1170E1",
+} as const;
+
 interface CftcRow {
   report_date_as_yyyy_mm_dd: string;
   noncomm_positions_long_all: string;
   noncomm_positions_short_all: string;
+  open_interest_all: string;
 }
 
-async function fetchRows(marketName: string, limit: number): Promise<CftcRow[]> {
+export interface CotPoint {
+  date: string;
+  /** Net non-commercial position, contracts. */
+  net: number;
+  /** Net as % of open interest — comparable across time and contracts. */
+  netPctOi: number | null;
+}
+
+async function fetchRows(code: string, limit: number): Promise<CftcRow[]> {
   const url = new URL(BASE);
-  url.searchParams.set("$where", `market_and_exchange_names = '${marketName.replace(/'/g, "''")}'`);
+  url.searchParams.set("$where", `cftc_contract_market_code = '${code}'`);
   url.searchParams.set("$order", "report_date_as_yyyy_mm_dd DESC");
-  url.searchParams.set("$select", "report_date_as_yyyy_mm_dd,noncomm_positions_long_all,noncomm_positions_short_all");
+  url.searchParams.set(
+    "$select",
+    "report_date_as_yyyy_mm_dd,noncomm_positions_long_all,noncomm_positions_short_all,open_interest_all"
+  );
   url.searchParams.set("$limit", String(limit));
 
   const res = await fetch(url.toString(), { cache: "no-store" });
@@ -18,37 +51,37 @@ async function fetchRows(marketName: string, limit: number): Promise<CftcRow[]> 
   return res.json();
 }
 
-/** Latest + previous report net position. */
-export async function fetchCftcNet(marketName: string): Promise<{ net: number | null; prevNet: number | null }> {
-  const rows = await fetchRows(marketName, 2);
-  if (rows.length === 0) return { net: null, prevNet: null };
-  const net = Number(rows[0].noncomm_positions_long_all) - Number(rows[0].noncomm_positions_short_all);
-  const prevNet =
-    rows.length > 1
-      ? Number(rows[1].noncomm_positions_long_all) - Number(rows[1].noncomm_positions_short_all)
-      : null;
-  return { net, prevNet };
-}
-
-/** Chronological (oldest -> newest) net-position history, for z-score / sparkline. */
-export async function fetchCftcHistory(marketName: string, limit = 104): Promise<number[]> {
-  const rows = await fetchRows(marketName, limit);
+/** Chronological (oldest -> newest) net-position history with dates and %OI. */
+export async function fetchCotSeries(code: string, limit = 156): Promise<CotPoint[]> {
+  const rows = await fetchRows(code, limit);
   return rows
     .slice()
     .reverse()
-    .map((r) => Number(r.noncomm_positions_long_all) - Number(r.noncomm_positions_short_all));
+    .map((r) => {
+      const net = Number(r.noncomm_positions_long_all) - Number(r.noncomm_positions_short_all);
+      const oi = Number(r.open_interest_all);
+      return {
+        date: r.report_date_as_yyyy_mm_dd.slice(0, 10),
+        net,
+        netPctOi: oi > 0 ? (net / oi) * 100 : null,
+      };
+    });
 }
 
-/** Same as fetchCftcHistory but keeps report dates, for full-depth quant cards. */
-export async function fetchCftcHistoryDated(marketName: string, limit = 104): Promise<{ date: string; value: number }[]> {
-  const rows = await fetchRows(marketName, limit);
-  return rows
-    .slice()
-    .reverse()
-    .map((r) => ({
-      date: r.report_date_as_yyyy_mm_dd.slice(0, 10),
-      value: Number(r.noncomm_positions_long_all) - Number(r.noncomm_positions_short_all),
-    }));
+/**
+ * COT Index: where the latest net position sits in its trailing range,
+ * 0 = most short of the window, 100 = most long. The standard way COT is
+ * actually read — raw contract counts are meaningless across contracts and
+ * across years of changing open interest.
+ */
+export function cotIndex(series: CotPoint[], window = 156): number | null {
+  const slice = series.slice(-window);
+  if (slice.length < 20) return null;
+  const nets = slice.map((p) => p.net);
+  const min = Math.min(...nets);
+  const max = Math.max(...nets);
+  if (max === min) return 50;
+  return ((nets[nets.length - 1] - min) / (max - min)) * 100;
 }
 
 export function fmtNet(n: number | null): string {

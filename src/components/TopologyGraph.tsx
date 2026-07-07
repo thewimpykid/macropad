@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum } from "d3-force";
 import type { MacroPanel } from "@/lib/macroData";
 import type { MarketRow } from "@/lib/getMarkets";
-import { MARKET_LINKS } from "@/lib/markets";
+import { IMPACTS, marketRowId } from "@/lib/markets";
 import { alignByDate, pearson } from "@/lib/stats";
 
 interface GraphNode extends SimulationNodeDatum {
@@ -83,10 +83,10 @@ export default function TopologyGraph({ panels, markets }: { panels: MacroPanel[
         });
         linkList.push({ source: `panel:${panel.id}`, target: s.id, r: null, kind: "panel-membership" });
 
-        const links = MARKET_LINKS[s.id];
-        if (links) {
-          for (const link of links) {
-            const marketId = `market:${link.symbol}`;
+        const impacts = IMPACTS[s.id];
+        if (impacts) {
+          for (const impact of impacts) {
+            const marketId = marketRowId(impact.symbol);
             const market = marketById.get(marketId);
             if (market && market.history) {
               usedMarketIds.add(marketId);
