@@ -2,18 +2,47 @@ import { fetchRssHeadlines, type RssItem } from "@/lib/rss";
 import { scoreSentiment } from "@/lib/sentiment";
 
 /**
- * Real macro/policy news desks, not per-ticker stock headlines — this is
- * what actually moves the macro picture (Fed action, employment, rates,
- * geopolitics), not "Apple shares rise." Every URL below is live-verified
- * (curl'd, 200, real headlines) before being wired in.
+ * Real macro/policy news desks, not per-ticker stock headlines. Every URL
+ * below is live-verified (curl'd, 200, real headlines) before being wired
+ * in. Federal Reserve points at the monetary-policy-only feed (FOMC
+ * statements, rate decisions) rather than the general press feed, which is
+ * mostly bank enforcement actions and compliance notices, not macro events.
+ * Yahoo Finance's general feed was dropped: it's single-stock commentary
+ * ("Is Veralto Trading at a Fair Valuation?"), not macro news.
  */
 const NEWS_SOURCES = [
-  { label: "CNBC Economy", url: "https://www.cnbc.com/id/20910258/device/rss/rss.html" },
-  { label: "Federal Reserve", url: "https://www.federalreserve.gov/feeds/press_all.xml" },
-  { label: "WSJ Markets", url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml" },
-  { label: "Yahoo Finance", url: "https://finance.yahoo.com/news/rssindex" },
-  { label: "FXStreet", url: "https://www.fxstreet.com/rss/news" },
+  { label: "CNBC Economy", url: "https://www.cnbc.com/id/20910258/device/rss/rss.html", filterMacro: false },
+  { label: "Federal Reserve", url: "https://www.federalreserve.gov/feeds/press_monetary.xml", filterMacro: false },
+  { label: "Federal Reserve Speeches", url: "https://www.federalreserve.gov/feeds/speeches.xml", filterMacro: false },
+  { label: "ECB", url: "https://www.ecb.europa.eu/rss/press.html", filterMacro: false },
+  // WSJ/FXStreet mix real macro coverage with routine single-name market
+  // color ("Comex Gold, Silver Settle Lower") — keyword-gate just these two
+  // so the pooled feed stays event-driven instead of daily price chatter.
+  { label: "WSJ Markets", url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", filterMacro: true },
+  { label: "FXStreet", url: "https://www.fxstreet.com/rss/news", filterMacro: true },
 ];
+
+/**
+ * Keyword gate applied to specific sources in the pooled general feed (see
+ * filterMacro above). Not applied to per-asset feeds, which are
+ * intentionally ticker-specific.
+ */
+const MACRO_KEYWORDS = [
+  "fed", "fomc", "federal reserve", "ecb", "central bank", "boe", "boj", "pboc",
+  "rate cut", "rate hike", "rate decision", "interest rate", "monetary policy",
+  "inflation", "cpi", "pce", "disinflation", "deflation",
+  "gdp", "recession", "economy", "economic", "growth",
+  "jobs report", "payrolls", "unemployment", "jobless", "labor market", "labor force",
+  "yield", "treasury", "bond market", "dollar", "currency", "fx",
+  "tariff", "trade war", "trade deal", "sanctions", "opec", "oil price",
+  "geopolitic", "war", "ceasefire", "conflict", "election", "government shutdown",
+  "debt ceiling", "budget", "deficit", "stimulus", "quantitative easing", "quantitative tightening",
+];
+
+function isMacroRelevant(title: string): boolean {
+  const t = title.toLowerCase();
+  return MACRO_KEYWORDS.some((k) => t.includes(k));
+}
 
 export interface NewsItem {
   title: string;
@@ -119,7 +148,10 @@ export function sentimentTrend(items: NewsItem[], halfLifeHours = 3): { date: st
 /** Fetches headlines across macro news desks — the "general" feed. */
 export async function fetchNewsFeed(maxItems = 120): Promise<NewsItem[]> {
   const results = await Promise.all(
-    NEWS_SOURCES.map(async (src) => ({ source: src.label, items: await fetchRssHeadlines(src.url) }))
+    NEWS_SOURCES.map(async (src) => {
+      const items = await fetchRssHeadlines(src.url);
+      return { source: src.label, items: src.filterMacro ? items.filter((h) => isMacroRelevant(h.title)) : items };
+    })
   );
   return mergeAndScore(results, maxItems);
 }
