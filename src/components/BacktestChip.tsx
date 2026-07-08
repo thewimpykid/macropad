@@ -7,11 +7,11 @@ import { backtestTooltip, type BacktestEvidence } from "@/lib/backtestImportance
 export default function BacktestChip({ evidence }: { evidence: BacktestEvidence }) {
   return (
     <span
-      className="shrink-0 whitespace-nowrap font-mono text-[0.62rem] font-semibold uppercase tracking-wide"
-      style={{ color: "var(--amber)" }}
+      className="shrink-0 whitespace-nowrap rounded border px-1.5 py-[2px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em]"
+      style={{ color: "var(--amber)", borderColor: "color-mix(in srgb, var(--amber) 30%, var(--border))" }}
       title={backtestTooltip(evidence)}
     >
-      [bt#{evidence.rank}·{Math.round(evidence.weeklyShare * 100)}%]
+      bt {evidence.rank} · {Math.round(evidence.weeklyShare * 100)}%
     </span>
   );
 }

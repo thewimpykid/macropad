@@ -74,10 +74,7 @@ function daysBetween(a: string, b: string): number {
 
 function SectionHead({ title }: { title: string }) {
   return (
-    <div className="mb-1.5 flex items-center gap-2 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-dim)]">
-      <span aria-hidden="true" className="text-[var(--text-faint)]">
-        ┌─
-      </span>
+    <div className="mb-2 flex items-center gap-3 font-mono text-[0.62rem] font-medium uppercase tracking-[0.14em] text-[var(--text-faint)]">
       <span className="whitespace-nowrap">{title}</span>
       <span className="h-px flex-1 bg-[var(--border)]" />
     </div>
@@ -606,16 +603,22 @@ export default function QuantCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="m-0 text-[1rem] font-semibold leading-tight sm:text-[1.1rem]">{series.name}</h3>
-            <span className="shrink-0 font-mono text-[0.68rem] font-bold uppercase tracking-wide" style={{ color: chipColor[chipTone] }}>
-              [{chipLabel[chipTone]}]
+            <span
+              className="shrink-0 rounded border px-1.5 py-[2px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em]"
+              style={{ color: chipColor[chipTone], borderColor: "var(--border-strong)" }}
+            >
+              {chipLabel[chipTone]}
             </span>
-            <span className="hidden shrink-0 font-mono text-[0.62rem] uppercase tracking-wide text-[var(--text-faint)] sm:inline" title={config?.rationale}>
-              [{methodLabel[method]}]
+            <span
+              className="hidden shrink-0 rounded border border-[var(--border)] px-1.5 py-[2px] font-mono text-[0.58rem] uppercase tracking-[0.12em] text-[var(--text-faint)] sm:inline"
+              title={config?.rationale}
+            >
+              {methodLabel[method]}
             </span>
             {backtest && <BacktestChip evidence={backtest} />}
             {!isRelevant && (
-              <span className="shrink-0 whitespace-nowrap font-mono text-[0.62rem] text-[var(--text-faint)]">
-                [no {assetLabel ?? assetFilter} link]
+              <span className="shrink-0 whitespace-nowrap rounded border border-[var(--border)] px-1.5 py-[2px] font-mono text-[0.58rem] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                no {assetLabel ?? assetFilter} link
               </span>
             )}
           </div>

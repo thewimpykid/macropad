@@ -7,7 +7,6 @@ import SeriesCard from "@/components/SeriesCard";
 import QuantCard from "@/components/QuantCard";
 import NewsFeedCard from "@/components/NewsFeedCard";
 import MarketTicker from "@/components/MarketTicker";
-import TerminalHero from "@/components/TerminalHero";
 import OverviewBoard from "@/components/OverviewBoard";
 import CustomDashboardPage from "@/components/CustomDashboardPage";
 import CustomBiasPage from "@/components/CustomBiasPage";
@@ -20,7 +19,6 @@ const NEWS_ID = "news";
 const CUSTOM_DASHBOARD_ID = "custom-dashboard";
 const CUSTOM_BIAS_ID = "custom-bias";
 
-/** tmux-style short window names for the tab bar. */
 const SHORT_LABEL: Record<string, string> = {
   "us-macro": "macro",
   "yield-rates": "rates",
@@ -42,52 +40,39 @@ function panelSignals(panel: MacroPanel): { bull: number; bear: number } {
   return { bull, bear };
 }
 
-function Tab({
-  index,
-  label,
-  isActive,
-  onClick,
-  bull,
-  bear,
-}: {
-  index: number;
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-  bull?: number;
-  bear?: number;
-}) {
+/** Wordmark that resolves out of a brief character scramble, then parks a cursor. */
+function Wordmark() {
+  const TARGET = "MACROPAD";
+  const [txt, setTxt] = useState(TARGET);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const CH = "<>/#%$@*+=?";
+    let frame = 0;
+    const id = setInterval(() => {
+      frame++;
+      const reveal = Math.floor(frame / 2.4);
+      if (reveal >= TARGET.length) {
+        setTxt(TARGET);
+        clearInterval(id);
+        return;
+      }
+      setTxt(
+        TARGET.split("")
+          .map((c, i) => (i <= reveal ? c : CH[Math.floor(Math.random() * CH.length)]))
+          .join("")
+      );
+    }, 42);
+    return () => clearInterval(id);
+  }, []);
   return (
-    <button
-      onClick={onClick}
-      className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 font-mono text-[0.72rem] transition-colors ${
-        isActive
-          ? "border-[var(--accent)] text-[var(--accent)] glow"
-          : "border-transparent text-[var(--text-dim)] hover:text-[var(--text)]"
-      }`}
-    >
-      <span className={isActive ? "text-[var(--accent)]" : "text-[var(--text-faint)]"}>{index}:</span>
-      {label}
-      {(bull ?? 0) + (bear ?? 0) > 0 && (
-        <span className="hidden text-[0.62rem] lg:inline">
-          {bull ? <span className="text-[var(--up)]">{bull}▲</span> : null}
-          {bear ? <span className="text-[var(--down)]">{bear}▼</span> : null}
-        </span>
-      )}
-    </button>
+    <span className="shrink-0 select-none whitespace-nowrap font-mono text-[0.86rem] font-bold tracking-[0.18em] text-[var(--text)]">
+      {txt}
+      <span className="blink-cursor text-[var(--text-faint)]">_</span>
+    </span>
   );
 }
 
-function PageHead({ title, meta }: { title: string; meta?: React.ReactNode }) {
-  return (
-    <div className="mb-5 flex flex-wrap items-baseline gap-3">
-      <h1 className="font-display m-0 text-[1.1rem] leading-none text-[var(--accent)] glow">{title}</h1>
-      {meta && <span className="font-mono text-[0.66rem] text-[var(--text-faint)]">{meta}</span>}
-    </div>
-  );
-}
-
-/** Live UTC-naive local clock for the statusline; blank until mounted so SSR matches. */
+/** Live local clock for the statusline; blank until mounted so SSR matches. */
 function Clock() {
   const [t, setT] = useState("");
   useEffect(() => {
@@ -97,6 +82,15 @@ function Clock() {
     return () => clearInterval(id);
   }, []);
   return <span className="font-mono tabular-nums">{t}</span>;
+}
+
+function PageHead({ title, meta }: { title: string; meta?: React.ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      <h1 className="font-display m-0 text-[1.45rem] leading-none text-[var(--text)]">{title}</h1>
+      {meta && <span className="font-mono text-[0.66rem] tracking-wide text-[var(--text-faint)]">{meta}</span>}
+    </div>
+  );
 }
 
 export default function DashboardShell({
@@ -146,44 +140,47 @@ export default function DashboardShell({
     { bull: 0, bear: 0 }
   );
 
-  const tabs: { id: string; label: string; bull?: number; bear?: number }[] = [
+  const tabs: { id: string; label: string }[] = [
     { id: BOARD_ID, label: "board" },
     { id: NEWS_ID, label: "news" },
-    ...panels.map((p) => ({ id: p.id, label: SHORT_LABEL[p.id] ?? p.id, ...panelSignals(p) })),
+    ...panels.map((p) => ({ id: p.id, label: SHORT_LABEL[p.id] ?? p.id })),
     { id: CUSTOM_DASHBOARD_ID, label: "custom-dash" },
     { id: CUSTOM_BIAS_ID, label: "custom-bias" },
   ];
 
   return (
-    <div className="relative z-[1] flex min-h-screen flex-col pb-8">
-      <TerminalHero seriesCount={totalSeries} bull={totals.bull} bear={totals.bear} lastUpdated={lastUpdated} />
-
-      <MarketTicker markets={markets} />
-
-      <div className="sticky top-0 z-30 flex items-stretch gap-1 border-b border-[var(--border)] bg-[var(--panel-2)] pr-2">
-        <nav className="no-scrollbar flex flex-1 items-stretch overflow-x-auto px-1">
-          {tabs.map((t, i) => (
-            <Tab
-              key={t.id}
-              index={i}
-              label={t.label}
-              isActive={activeId === t.id}
-              onClick={() => pickPage(t.id)}
-              bull={t.bull}
-              bear={t.bear}
-            />
-          ))}
-        </nav>
-        <div className="flex shrink-0 items-center py-1.5">
+    <div className="flex min-h-screen flex-col pb-8">
+      <header
+        className="sticky top-0 z-40 border-b border-[var(--border)] backdrop-blur-md"
+        style={{ background: "color-mix(in srgb, var(--bg) 86%, transparent)" }}
+      >
+        <div className="mx-auto flex h-12 w-full max-w-[1760px] items-center gap-4 px-4 sm:gap-6 sm:px-6 lg:px-8">
+          <Wordmark />
+          <nav className="no-scrollbar relative flex h-full flex-1 items-stretch gap-1 overflow-x-auto">
+            {tabs.map((t) => {
+              const isActive = activeId === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => pickPage(t.id)}
+                  className={`relative shrink-0 whitespace-nowrap px-2.5 font-mono text-[0.7rem] tracking-wide transition-colors sm:px-3 ${
+                    isActive ? "text-[var(--text)]" : "text-[var(--text-faint)] hover:text-[var(--text-dim)]"
+                  }`}
+                >
+                  {t.label}
+                  {isActive && <span className="absolute inset-x-2.5 bottom-0 h-px bg-[var(--text)] sm:inset-x-3" />}
+                </button>
+              );
+            })}
+          </nav>
           <select
             value={assetFilter}
             onChange={(e) => setAssetFilter(e.target.value)}
             aria-label="Asset lens"
-            className="appearance-none border px-2 py-1 font-mono text-[0.68rem] outline-none"
+            className="max-w-[96px] shrink-0 appearance-none rounded border bg-transparent px-2 py-1 font-mono text-[0.66rem] outline-none sm:max-w-none"
             style={{
-              borderColor: assetFilter ? "color-mix(in srgb, var(--accent) 55%, transparent)" : "var(--border)",
-              background: assetFilter ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "var(--panel)",
-              color: assetFilter ? "var(--accent)" : "var(--text-dim)",
+              borderColor: assetFilter ? "var(--border-strong)" : "var(--border)",
+              color: assetFilter ? "var(--text)" : "var(--text-faint)",
             }}
           >
             <option value="">lens: all</option>
@@ -193,84 +190,92 @@ export default function DashboardShell({
               </option>
             ))}
           </select>
+          <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-[var(--text-faint)] md:flex">
+            <span className="keep-round h-1.5 w-1.5 rounded-full" style={{ background: lastUpdated ? "var(--up)" : "var(--text-faint)" }} />
+            {lastUpdated ? "live" : "offline"}
+          </span>
         </div>
-      </div>
+      </header>
 
-      <main className="dotgrid min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
-        {isBoard ? (
-          <>
-            <PageHead
-              title="The Board"
-              meta={
-                <>
-                  {totalSeries} series · <span className="text-[var(--up)]">{totals.bull}▲</span>{" "}
-                  <span className="text-[var(--down)]">{totals.bear}▼</span> strong
-                  {assetFilter && <> · lens {assetLabel}</>}
-                </>
-              }
-            />
-            <OverviewBoard panels={panels} assetFilter={assetFilter || null} onOpen={openFromBoard} />
-          </>
-        ) : isNews ? (
-          <>
-            <PageHead title="News" />
-            {newsSeries ? (
-              <NewsFeedCard series={newsSeries} />
-            ) : (
-              <p className="font-sans text-[0.85rem] text-[var(--text-faint)]">No news data yet.</p>
-            )}
-          </>
-        ) : isCustomDashboard ? (
-          <>
-            <PageHead title="Custom Dashboard" />
-            <CustomDashboardPage panels={panels} markets={markets} />
-          </>
-        ) : isCustomBias ? (
-          <>
-            <PageHead title="Custom Bias" />
-            <CustomBiasPage panels={panels} />
-          </>
-        ) : active ? (
-          <>
-            <PageHead
-              title={active.title}
-              meta={(() => {
-                const { bull, bear } = panelSignals(active);
-                return bull + bear === 0 ? (
-                  "no strong reads"
-                ) : (
+      <MarketTicker markets={markets} />
+
+      <main className="blueprint min-w-0 flex-1">
+        <div className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8">
+          {isBoard ? (
+            <>
+              <PageHead
+                title="The Board"
+                meta={
                   <>
-                    <span className="text-[var(--up)]">{bull}▲</span> <span className="text-[var(--down)]">{bear}▼</span> strong
+                    {totalSeries} series · <span className="text-[var(--up)]">{totals.bull}▲</span>{" "}
+                    <span className="text-[var(--down)]">{totals.bear}▼</span> strong
+                    {assetFilter && <> · lens {assetLabel}</>}
                   </>
-                );
-              })()}
-            />
+                }
+              />
+              <OverviewBoard panels={panels} assetFilter={assetFilter || null} onOpen={openFromBoard} />
+            </>
+          ) : isNews ? (
+            <>
+              <PageHead title="News" />
+              {newsSeries ? (
+                <NewsFeedCard series={newsSeries} />
+              ) : (
+                <p className="font-sans text-[0.85rem] text-[var(--text-faint)]">No news data yet.</p>
+              )}
+            </>
+          ) : isCustomDashboard ? (
+            <>
+              <PageHead title="Custom Dashboard" />
+              <CustomDashboardPage panels={panels} markets={markets} />
+            </>
+          ) : isCustomBias ? (
+            <>
+              <PageHead title="Custom Bias" />
+              <CustomBiasPage panels={panels} />
+            </>
+          ) : active ? (
+            <>
+              <PageHead
+                title={active.title}
+                meta={(() => {
+                  const { bull, bear } = panelSignals(active);
+                  return bull + bear === 0 ? (
+                    "no strong reads"
+                  ) : (
+                    <>
+                      <span className="text-[var(--up)]">{bull}▲</span> <span className="text-[var(--down)]">{bear}▼</span> strong
+                    </>
+                  );
+                })()}
+              />
 
-            <div className={DEEP_PANELS.has(active.id) ? "flex flex-col gap-2" : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"}>
-              {active.series
-                .filter((series) => series.id !== "geo:news-feed")
-                .map((series) => (
-                  <div key={series.id} id={`card-${series.id}`} className="scroll-mt-16">
-                    {DEEP_PANELS.has(active.id) ? (
-                      <QuantCard
-                        series={series}
-                        markets={markets}
-                        assetFilter={assetFilter || null}
-                        assetLabel={assetLabel}
-                        defaultOpen={focusSeriesId === series.id}
-                      />
-                    ) : (
-                      <SeriesCard series={series} assetFilter={assetFilter || null} assetLabel={assetLabel} />
-                    )}
-                  </div>
-                ))}
-            </div>
-          </>
-        ) : null}
+              <div className={DEEP_PANELS.has(active.id) ? "flex flex-col gap-2" : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"}>
+                {active.series
+                  .filter((series) => series.id !== "geo:news-feed")
+                  .map((series) => (
+                    <div key={series.id} id={`card-${series.id}`} className="scroll-mt-16">
+                      {DEEP_PANELS.has(active.id) ? (
+                        <QuantCard
+                          series={series}
+                          markets={markets}
+                          assetFilter={assetFilter || null}
+                          assetLabel={assetLabel}
+                          defaultOpen={focusSeriesId === series.id}
+                        />
+                      ) : (
+                        <SeriesCard series={series} assetFilter={assetFilter || null} assetLabel={assetLabel} />
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </>
+          ) : null}
+        </div>
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-40 flex h-8 items-center gap-x-4 overflow-hidden border-t border-[var(--border)] bg-[var(--panel-2)] px-3 font-mono text-[0.66rem] text-[var(--text-dim)]">
-        <span className="font-bold tracking-[0.08em] text-[var(--accent)]">MACROPAD</span>
+      <footer className="fixed inset-x-0 bottom-0 z-40 flex h-8 items-center gap-x-4 overflow-hidden border-t border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-[0.64rem] text-[var(--text-faint)] sm:px-4">
+        <span className="tracking-[0.14em] text-[var(--text-dim)]">MACROPAD</span>
         <span className="hidden sm:inline">{totalSeries} series</span>
         <span>
           <span className="text-[var(--up)]">{totals.bull}▲</span> <span className="text-[var(--down)]">{totals.bear}▼</span>
@@ -278,9 +283,9 @@ export default function DashboardShell({
         <span className="hidden md:inline">
           synced {lastUpdated ? new Date(lastUpdated).toLocaleTimeString("en-US", { hour12: false }) : "never"}
         </span>
-        <span className="ml-auto flex items-center gap-1.5">
+        <span className="ml-auto flex items-center gap-1.5 text-[var(--text-dim)]">
           <Clock />
-          <span className="blink-cursor text-[var(--accent)]">▊</span>
+          <span className="blink-cursor">_</span>
         </span>
       </footer>
     </div>
