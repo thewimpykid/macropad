@@ -15,8 +15,7 @@ import BoardPage from "@/components/BoardPage";
 import DocumentationPage from "@/components/DocumentationPage";
 import { MARKET_SYMBOLS } from "@/lib/markets";
 import { getSignTone } from "@/lib/bias";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import SignOutButton from "@/components/marketing/SignOutButton";
 
 const DEEP_PANELS = new Set(["us-macro", "yield-rates", "cot-positioning", "transmission", "geopolitics", "volatility"]);
 /** Catalogue-only panels - carry data (e.g. per-asset news) but never show up as their own nav entry. */
@@ -91,19 +90,9 @@ export default function DashboardShell({
   lastUpdated: string | null;
   markets: MarketRow[];
 }) {
-  const router = useRouter();
   const [activeId, setActiveId] = useState(BOARD_ID);
   const [navOpen, setNavOpen] = useState(false);
   const [newsAssetTab, setNewsAssetTab] = useState<string>(""); // "" = general macro feed
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function handleSignOut() {
-    setSigningOut(true);
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
-  }
   const visiblePanels = panels.filter((p) => !HIDDEN_PANELS.has(p.id));
   const active = visiblePanels.find((p) => p.id === activeId);
   const pickPage = (id: string) => {
@@ -231,17 +220,8 @@ export default function DashboardShell({
           </nav>
 
           <div className="shrink-0 border-t border-[var(--border)] px-5 py-3.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[0.66rem] text-[var(--text-faint)]">
-                {visiblePanels.reduce((n, p) => n + p.series.length, 0)} live series
-              </span>
-              <button
-                onClick={handleSignOut}
-                disabled={signingOut}
-                className="font-sans text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-faint)] transition-colors hover:text-[var(--text)] disabled:opacity-50"
-              >
-                {signingOut ? "Signing out..." : "Sign out"}
-              </button>
+            <div className="flex items-center justify-end gap-2">
+              <SignOutButton className="font-sans text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-faint)] transition-colors hover:text-[var(--text)] disabled:opacity-50" />
             </div>
           </div>
         </aside>
@@ -323,7 +303,6 @@ export default function DashboardShell({
           ) : active ? (
             <>
               <header className="mb-10">
-                <div className="eyebrow mb-2">{active.series.length} live series</div>
                 <h1 className="font-display m-0 text-balance text-[2.6rem] uppercase leading-none tracking-[-0.03em] sm:text-[3.4rem]">{active.title}</h1>
               </header>
 

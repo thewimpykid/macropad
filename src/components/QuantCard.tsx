@@ -573,6 +573,7 @@ export default function QuantCard({
             {bias && bias.tone !== "flat" && (
               <span className="shrink-0 text-[0.72rem] font-semibold uppercase tracking-wide" style={{ color: biasToneColor }}>
                 {bias.tone === "up" ? "bullish" : "bearish"}
+                {signal && ` ${signal.score > 0 ? "+" : ""}${Math.round(signal.score * 100)}%`}
               </span>
             )}
             {!isRelevant && (

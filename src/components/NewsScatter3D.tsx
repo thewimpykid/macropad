@@ -110,6 +110,11 @@ export default function NewsScatter3D({ headlines }: { headlines: NewsHeadlinePa
         </div>
       </div>
 
+      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[0.62rem] text-[var(--text-faint)]">
+        <span>X axis: time, oldest to newest, left to right</span>
+        <span>Y axis: sentiment score, -1 bearish to +1 bullish, bottom to top</span>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         <div
           className="h-[360px] w-full overflow-hidden border border-[var(--border)] bg-black"

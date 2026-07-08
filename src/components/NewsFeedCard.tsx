@@ -40,6 +40,7 @@ export default function NewsFeedCard({ series }: { series: MacroSeries }) {
             <h3 className="m-0 truncate text-[1.15rem] font-semibold">{series.name}</h3>
             <span className="shrink-0 text-[0.72rem] font-semibold uppercase tracking-wide" style={{ color: chipColor[series.status] }}>
               {chipLabel[series.status]}
+              {series.zscore !== null && ` ${series.zscore > 0 ? "+" : ""}${Math.round(series.zscore * 100)}%`}
             </span>
           </div>
           <p className="m-0 mt-1.5 truncate font-sans text-[0.86rem] text-[var(--text-dim)]">{series.note}</p>
