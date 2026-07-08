@@ -86,9 +86,11 @@ export function scoreSentiment(text: string): SentimentResult {
 
   // Polarize: stretch mid-strength scores outward instead of a flat linear
   // squash, so genuinely mixed headlines cluster near neutral while anything
-  // with a real directional lean reads as clearly bullish/bearish.
-  const normalized = Math.max(-1, Math.min(1, raw / 4));
-  const score = Math.sign(normalized) * Math.pow(Math.abs(normalized), 0.65);
+  // with a real directional lean reads as clearly bullish/bearish. Divisor of
+  // 3 (was 4) and exponent of 0.5 (was 0.65) both push harder toward the
+  // extremes — a single strong word now saturates most of the range.
+  const normalized = Math.max(-1, Math.min(1, raw / 3));
+  const score = Math.sign(normalized) * Math.pow(Math.abs(normalized), 0.5);
   const label: SentimentResult["label"] = score > 0.1 ? "bullish" : score < -0.1 ? "bearish" : "neutral";
 
   return { score, label, matchedWords: matched };

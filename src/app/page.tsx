@@ -1,6 +1,7 @@
 import Link from "next/link";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
+import DecryptText from "@/components/marketing/DecryptText";
 
 const COVERAGE = [
   { icon: "us-macro", title: "US Macroeconomics", desc: "CPI, payrolls, PCE, ISM — the releases that move every desk." },
@@ -63,10 +64,17 @@ export default function LandingPage() {
               Live macro desk
             </div>
 
-            <h1 className="font-display m-0 max-w-3xl text-[2.6rem] uppercase leading-[0.98] tracking-[-0.02em] sm:text-[4.2rem]">
-              Read the <span className="glow-accent" style={{ color: "var(--accent)" }}>regime</span>,
-              <br />
-              not the noise.
+            <h1 className="font-display m-0 flex max-w-3xl flex-wrap items-center gap-x-4 text-[2.6rem] uppercase leading-[0.98] tracking-[-0.02em] sm:text-[4.2rem]">
+              <span>
+                Read the <span className="glow-accent" style={{ color: "var(--accent)" }}>regime</span>,
+                <br />
+                not the noise.
+              </span>
+              <DecryptText
+                text="[DECRYPTED]"
+                className="self-start font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] normal-case"
+                style={{ color: "var(--accent)" }}
+              />
             </h1>
 
             <p className="mt-6 max-w-xl font-sans text-[1.02rem] leading-relaxed text-[var(--text-dim)] sm:text-[1.1rem]">

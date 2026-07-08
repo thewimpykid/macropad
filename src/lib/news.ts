@@ -51,11 +51,22 @@ function mergeAndScore(results: { source: string; items: RssItem[] }[], maxItems
 }
 
 /**
+ * Stretches an already -1..1 aggregate outward, same shape as the
+ * per-headline polarization curve in sentiment.ts — a smoothed average of
+ * polarized inputs still regresses toward the middle, so re-polarize after
+ * aggregating or the final number reads flatter than the headlines it came from.
+ */
+function polarize(x: number): number {
+  return Math.sign(x) * Math.pow(Math.min(1, Math.abs(x)), 0.6);
+}
+
+/**
  * Recency-weighted average sentiment — a headline from 10 minutes ago should
  * move the live score more than one from yesterday. Exponential decay,
  * half-life in hours: a headline's weight halves every `halfLifeHours`.
+ * Half-life of 3 (was 6) so recent headlines dominate harder.
  */
-export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 6): number {
+export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 3): number {
   if (items.length === 0) return 0;
   const now = Date.now();
   let weightSum = 0;
@@ -66,7 +77,7 @@ export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 6): numb
     weightSum += weight;
     scoreSum += weight * it.sentimentScore;
   }
-  return weightSum > 0 ? scoreSum / weightSum : 0;
+  return weightSum > 0 ? polarize(scoreSum / weightSum) : 0;
 }
 
 /**
@@ -76,9 +87,12 @@ export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 6): numb
  * different sources and each one swings between -1 and +1 on its own, so a
  * line connecting them just zigzags. This produces one point per headline
  * (in chronological order) but each point is the decayed rolling average up
- * to that moment, same half-life logic as weightedSentimentAvg.
+ * to that moment, same half-life logic as weightedSentimentAvg. Half-life of
+ * 3h (was 6) so the line actually moves when fresh headlines swing hard, and
+ * each point is re-polarized so the trend doesn't read flatter than the
+ * headlines driving it.
  */
-export function sentimentTrend(items: NewsItem[], halfLifeHours = 6): { date: string; value: number }[] {
+export function sentimentTrend(items: NewsItem[], halfLifeHours = 3): { date: string; value: number }[] {
   const chronological = [...items].reverse(); // oldest -> newest
   const out: { date: string; value: number }[] = [];
   let weightSum = 0;
@@ -96,7 +110,7 @@ export function sentimentTrend(items: NewsItem[], halfLifeHours = 6): { date: st
     weightSum += 1;
     scoreSum += it.sentimentScore;
     lastTime = t;
-    out.push({ date: it.pubDate, value: weightSum > 0 ? scoreSum / weightSum : 0 });
+    out.push({ date: it.pubDate, value: weightSum > 0 ? polarize(scoreSum / weightSum) : 0 });
   }
 
   return out;
