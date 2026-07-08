@@ -2,6 +2,7 @@ export interface RssItem {
   title: string;
   link: string | null;
   pubDate: string | null; // ISO, if parseable
+  description: string | null; // article summary/dek, used to enrich sentiment scoring beyond the headline
 }
 
 function decodeXmlEntities(s: string): string {
@@ -35,7 +36,9 @@ export async function fetchRssHeadlines(url: string): Promise<RssItem[]> {
       const link = extractTag(block, "link");
       const pubDateRaw = extractTag(block, "pubDate");
       const pubDate = pubDateRaw ? new Date(pubDateRaw).toISOString() : null;
-      return { title, link, pubDate };
+      const descriptionRaw = extractTag(block, "description");
+      const description = descriptionRaw ? descriptionRaw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || null : null;
+      return { title, link, pubDate, description };
     })
     .filter((h): h is RssItem => h !== null);
 }

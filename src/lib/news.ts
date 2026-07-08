@@ -39,8 +39,8 @@ const MACRO_KEYWORDS = [
   "debt ceiling", "budget", "deficit", "stimulus", "quantitative easing", "quantitative tightening",
 ];
 
-function isMacroRelevant(title: string): boolean {
-  const t = title.toLowerCase();
+function isMacroRelevant(item: RssItem): boolean {
+  const t = `${item.title} ${item.description ?? ""}`.toLowerCase();
   return MACRO_KEYWORDS.some((k) => t.includes(k));
 }
 
@@ -53,7 +53,19 @@ export interface NewsItem {
   sentimentLabel: "bullish" | "bearish" | "neutral";
 }
 
-/** Dedupes by title, scores each headline, sorts newest first. */
+/**
+ * Scoring text for a headline: title plus its description/dek when the feed
+ * provides one (most of them do, and it's real article content, not just
+ * the headline), skipped when the description just duplicates the title
+ * verbatim, which some gov press feeds do.
+ */
+function scoringText(h: RssItem): string {
+  const desc = h.description?.trim();
+  if (!desc || desc.toLowerCase() === h.title.trim().toLowerCase()) return h.title;
+  return `${h.title}. ${desc}`;
+}
+
+/** Dedupes by title, scores each headline (title + description) sorts newest first. */
 function mergeAndScore(results: { source: string; items: RssItem[] }[], maxItems: number): NewsItem[] {
   const seen = new Set<string>();
   const merged: NewsItem[] = [];
@@ -63,7 +75,7 @@ function mergeAndScore(results: { source: string; items: RssItem[] }[], maxItems
       const key = h.title.toLowerCase().trim();
       if (seen.has(key)) continue;
       seen.add(key);
-      const sentiment = scoreSentiment(h.title);
+      const sentiment = scoreSentiment(scoringText(h));
       merged.push({
         title: h.title,
         link: h.link,
@@ -150,7 +162,7 @@ export async function fetchNewsFeed(maxItems = 120): Promise<NewsItem[]> {
   const results = await Promise.all(
     NEWS_SOURCES.map(async (src) => {
       const items = await fetchRssHeadlines(src.url);
-      return { source: src.label, items: src.filterMacro ? items.filter((h) => isMacroRelevant(h.title)) : items };
+      return { source: src.label, items: src.filterMacro ? items.filter(isMacroRelevant) : items };
     })
   );
   return mergeAndScore(results, maxItems);

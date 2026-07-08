@@ -203,9 +203,9 @@ export default function DashboardShell({
               title="Custom Bias"
               subtitle="your own weights + thresholds"
             />
-          </nav>
 
-          <div className="border-t border-[var(--border)] p-3">
+            <div className="my-2 border-t border-[var(--border)]" />
+
             <NavButton
               isActive={isDocs}
               onClick={() => pickPage(DOCS_ID)}
@@ -213,9 +213,9 @@ export default function DashboardShell({
               title="Documentation"
               subtitle="how the board works"
             />
-          </div>
+          </nav>
 
-          <div className="border-t border-[var(--border)] px-5 py-3.5 font-mono text-[0.66rem] text-[var(--text-faint)]">
+          <div className="shrink-0 border-t border-[var(--border)] px-5 py-3.5 font-mono text-[0.66rem] text-[var(--text-faint)]">
             {visiblePanels.reduce((n, p) => n + p.series.length, 0)} live series
           </div>
         </aside>

@@ -3,8 +3,16 @@
 import { useMemo, useState } from "react";
 import type { MacroPanel } from "@/lib/macroData";
 import { getIndicatorDoc } from "@/lib/indicatorDocs";
+import { getSignalConfig, type SignalMethod } from "@/lib/indicatorSignal";
 
 const HIDDEN_PANELS = new Set(["asset-news"]);
+
+const METHOD_LABEL: Record<SignalMethod, string> = {
+  momentum: "Momentum",
+  anchor: "Anchor",
+  threshold: "Threshold",
+  positioning: "Positioning",
+};
 
 interface SearchRow {
   id: string;
@@ -13,6 +21,10 @@ interface SearchRow {
   note: string;
   source: string;
   doc: string;
+  method: SignalMethod | null;
+  rationale: string | null;
+  reference: number | null;
+  band: number | null;
 }
 
 function buildIndex(panels: MacroPanel[]): SearchRow[] {
@@ -20,6 +32,7 @@ function buildIndex(panels: MacroPanel[]): SearchRow[] {
   for (const panel of panels) {
     for (const s of panel.series) {
       if (s.id === "geo:news-feed" && panel.id !== "geopolitics") continue;
+      const config = getSignalConfig(s.id);
       rows.push({
         id: s.id,
         name: s.name,
@@ -27,6 +40,10 @@ function buildIndex(panels: MacroPanel[]): SearchRow[] {
         note: s.note,
         source: s.source,
         doc: getIndicatorDoc(s.id, s.note),
+        method: config?.method ?? null,
+        rationale: config?.rationale ?? null,
+        reference: config?.reference ?? null,
+        band: config?.band ?? null,
       });
     }
   }
@@ -55,7 +72,9 @@ export default function DocumentationPage({ panels }: { panels: MacroPanel[] }) 
         r.panelTitle.toLowerCase().includes(q) ||
         r.note.toLowerCase().includes(q) ||
         r.source.toLowerCase().includes(q) ||
-        r.doc.toLowerCase().includes(q)
+        r.doc.toLowerCase().includes(q) ||
+        (r.method?.toLowerCase().includes(q) ?? false) ||
+        (r.rationale?.toLowerCase().includes(q) ?? false)
     );
   }, [index, query]);
 
@@ -83,10 +102,9 @@ export default function DocumentationPage({ panels }: { panels: MacroPanel[] }) 
         <Section title="Panel pages">
           <p className="m-0">
             Each panel groups related indicators: US Macroeconomics, Yield Rates, COT Positioning, Transmission
-            Check, Geopolitics, and Volatility. Clicking a panel in the sidebar opens a detail view of every
-            series inside it, including the full history chart, sparkline, and any extra stats attached to that
-            series (for example the Sahm Rule reading attached to Unemployment, or the COT index attached to
-            each positioning series).
+            Check, Geopolitics, and Volatility. Clicking a panel in the sidebar opens every series inside it as a
+            row you can click to expand, a collapsed header showing the name, current value, and a small
+            percentage score, with a chevron on the right marking it as expandable.
           </p>
           <p className="m-0">
             Colors follow the same convention everywhere: green means the reading currently leans bullish for
@@ -97,23 +115,98 @@ export default function DocumentationPage({ panels }: { panels: MacroPanel[] }) 
           </p>
         </Section>
 
-        <Section title="Signal scores and thresholds">
+        <Section title="Expanding an indicator row (the dropdowns)">
           <p className="m-0">
-            Most series carry a signal score from negative 1 to positive 1, shown as the colored bar or number
-            near each indicator. This is not a statistical z-score despite living in a field with that name
-            historically. It is a method based score computed one of a few ways depending on what kind of
-            indicator it is: momentum based (is it moving up or down relative to its own recent history),
-            positioning based (used for COT series, where it reflects how crowded a position is within its own
-            multi year range), anchor based (distance from a fixed target, like inflation versus the 2 percent
-            target), or threshold based (distance from a fixed trigger level, like the Sahm Rule's 0.50 point
-            recession threshold).
+            Click any indicator row to open it. What appears depends on the indicator, but the layout is always
+            the same set of pieces, top to bottom:
           </p>
+          <ul className="m-0 flex list-disc flex-col gap-2 pl-5">
+            <li>
+              <span className="text-[var(--text)]">Bias label.</span> A short sentence stating the current read
+              in plain language, colored green for bullish, red for bearish, gray for flat. This comes from the
+              same bias logic used on the Board, so the label here always matches the color you saw before
+              expanding.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">Linked assets.</span> Shown only when this indicator has a
+              defined effect on one or more of the ten tracked assets. Each linked asset shows its own current
+              price context and the direction this indicator is pushing it. If a row has no Linked assets
+              section, it means Macropad has not mapped a direct asset effect for that specific indicator yet,
+              not that the indicator is unimportant.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">Specialized metrics.</span> Extra stats attached to that
+              specific series, each with its own small chart, for example the Sahm Rule reading under
+              Unemployment, the COT index and net-percent-of-open-interest under every positioning series, or
+              the 3m and 6m annualized paces under CPI. A flag or highlighted color on one of these means that
+              specific extra stat has crossed its own separately defined trigger level, which is usually a
+              different threshold than the main indicator's own signal score.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">The method body.</span> A chart and readout specific to
+              whichever scoring method this indicator uses, momentum, anchor, threshold, or positioning. See the
+              next section for what each one shows.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">Source and window.</span> The bottom row of every expanded
+              card, showing exactly where the data comes from (for example FRED CPIAUCSL) and the lookback
+              window and method used to compute the score (for example 3y daily, momentum 20d).
+            </li>
+          </ul>
           <p className="m-0">
-            A score near 0 means the indicator is near its neutral zone. A score approaching positive 1 or
-            negative 1 means the indicator is at an extreme relative to the method it is being judged by. The
-            window label under each indicator's value tells you the lookback period and method used, for
-            example 3y daily, momentum 20d, which means the score is computed over a 3 year daily history using
-            20 day momentum.
+            A handful of freshly added or thin history series render as a simpler, non expandable card instead,
+            showing just the value, a sparkline, and the raw score bar with no dropdown. That happens
+            automatically whenever a series does not yet have enough history (under 20 data points) for the full
+            method based scoring to run.
+          </p>
+        </Section>
+
+        <Section title="Signal scores and the four scoring methods">
+          <p className="m-0">
+            Most series carry a signal score from negative 1 to positive 1, shown as the small percentage next
+            to the value and as the colored bar on the simpler cards. Despite the historical name z-score living
+            on in one internal field name, this is not a plain statistical z-score. Every indicator is scored
+            with whichever of four methods actually fits how that specific indicator behaves economically, and
+            the search results below list the exact method, reference level, and band used for each one.
+          </p>
+          <ul className="m-0 flex list-disc flex-col gap-3 pl-5">
+            <li>
+              <span className="text-[var(--text)]">Momentum.</span> Used when the level itself is arbitrary or
+              structurally drifting and the direction of change is what actually matters, for example the Fed
+              balance sheet or the 10 year yield. Compares the average of the most recent window of readings
+              against the average of the equal length window right before it, then scales that change by how
+              volatile the series normally is period to period, so a big move in a normally calm series scores
+              higher than the same size move in a normally noisy one.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">Anchor.</span> Used when a real economic reference point
+              exists, for example CPI judged against the Fed's 2 percent target, or the VIX judged against its
+              long run average near 17. The score is simply how far the latest reading sits from that reference,
+              divided by a band width chosen for that indicator, and capped at plus or minus 1. A reading right
+              at the reference scores 0, a reading a full band width away scores the full plus or minus 1.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">Threshold.</span> Used when crossing a specific line is the
+              actual event, not the size of the move on either side of it, for example the 10y-2y yield curve
+              going from positive to negative. Mechanically this is the same distance-from-reference math as
+              anchor, just with a much narrower band, so the score swings hard right around the zero crossing
+              itself rather than building up gradually.
+            </li>
+            <li>
+              <span className="text-[var(--text)]">Positioning.</span> Used for series with no fixed fair value
+              at all, mainly COT futures positioning and cross asset ratios, where the only sensible reference is
+              the indicator's own recent history. Blends a robust z-score (based on the median and typical
+              deviation, resistant to one-off outlier spikes skewing everything) with a percentile rank, both
+              computed over roughly a 2 year window, so the score reflects how crowded or stretched the current
+              reading is relative to where it has actually traded recently.
+            </li>
+          </ul>
+          <p className="m-0">
+            A score near 0 means the indicator is near its neutral zone for whichever method it uses. A score
+            approaching positive 1 or negative 1 means it is at an extreme relative to that method. The window
+            label under each indicator's value states the lookback period and method together, for example 3y
+            daily, momentum 20d, meaning the score is computed over a 3 year daily history using a 20 day
+            momentum window.
           </p>
         </Section>
 
@@ -190,8 +283,28 @@ export default function DocumentationPage({ panels }: { panels: MacroPanel[] }) 
               <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                 <h3 className="m-0 text-[0.95rem] font-semibold text-[var(--text)]">{r.name}</h3>
                 <span className="eyebrow" style={{ color: "var(--accent)" }}>{r.panelTitle}</span>
+                {r.method && (
+                  <span className="eyebrow" style={{ color: "var(--text-faint)" }}>
+                    {METHOD_LABEL[r.method]} scoring
+                  </span>
+                )}
               </div>
               <p className="m-0 mt-2 font-sans text-[0.84rem] leading-relaxed text-[var(--text-dim)]">{r.doc}</p>
+
+              {r.rationale && (
+                <div className="mt-2.5 border-l-2 pl-3" style={{ borderColor: "var(--border-strong)" }}>
+                  <p className="m-0 font-sans text-[0.78rem] italic leading-relaxed text-[var(--text-faint)]">
+                    {r.rationale}
+                    {r.reference !== null && r.band !== null && (
+                      <span>
+                        {" "}
+                        Reference {r.reference}, band ±{r.band} for a full ±100% score.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
+
               <div className="mt-2.5 font-mono text-[0.66rem] uppercase tracking-wide text-[var(--text-faint)]">{r.source}</div>
             </div>
           ))}
