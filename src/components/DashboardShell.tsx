@@ -97,7 +97,10 @@ export default function DashboardShell({
   const newsSeries = panels.flatMap((p) => p.series).find((s) => s.id === "geo:news-feed") ?? null;
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="relative flex min-h-screen flex-col">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/mesh-wireframe.svg" alt="" aria-hidden="true" className="wireframe-bg" />
+      <div className="relative z-10 flex min-h-screen flex-col">
       <MarketTicker markets={markets} />
 
       <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 lg:hidden">
@@ -282,6 +285,7 @@ export default function DashboardShell({
             </>
           ) : null}
         </main>
+      </div>
       </div>
     </div>
   );

@@ -569,9 +569,9 @@ export default function QuantCard({
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 py-6 text-left sm:gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h3 className="font-display m-0 truncate text-[1.5rem] uppercase leading-none tracking-[-0.02em]">{series.name}</h3>
+            <h3 className="m-0 truncate text-[1.15rem] font-semibold">{series.name}</h3>
             {bias && bias.tone !== "flat" && (
-              <span className="tag-flag shrink-0" style={{ background: biasToneColor }}>
+              <span className="shrink-0 text-[0.72rem] font-semibold uppercase tracking-wide" style={{ color: biasToneColor }}>
                 {bias.tone === "up" ? "bullish" : "bearish"}
               </span>
             )}
@@ -591,7 +591,7 @@ export default function QuantCard({
         )}
 
         <div className="shrink-0 text-right">
-          <div className="font-display text-[1.8rem] leading-none tracking-[-0.02em] sm:text-[2.6rem]">{series.value}</div>
+          <div className="font-mono text-[1.4rem] font-semibold leading-none sm:text-[1.9rem]">{series.value}</div>
           {signal && (
             <div className="mt-1.5 font-mono text-[0.8rem]" style={{ color: toneColorFor(getSignTone(series.id, signal.score)) }}>
               {signal.score > 0 ? "+" : ""}
@@ -606,7 +606,7 @@ export default function QuantCard({
       {open && (
         <div className="pb-8">
           {bias && (
-            <div className="tag-flag" style={{ background: biasToneColor }}>
+            <div className="font-sans text-[0.92rem] font-semibold" style={{ color: biasToneColor }}>
               {bias.label}
             </div>
           )}

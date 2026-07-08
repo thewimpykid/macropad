@@ -14,7 +14,7 @@ const toneColor: Record<"bullish" | "bearish" | "neutral", string> = {
   neutral: "var(--flat)",
 };
 
-const chipBg: Record<MacroSeries["status"], string> = {
+const chipColor: Record<MacroSeries["status"], string> = {
   up: "var(--up)",
   down: "var(--down)",
   flat: "var(--flat)",
@@ -37,15 +37,15 @@ export default function NewsFeedCard({ series }: { series: MacroSeries }) {
       <div className="flex w-full items-center gap-3 py-6 text-left sm:gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h3 className="font-display m-0 truncate text-[1.5rem] uppercase leading-none tracking-[-0.02em]">{series.name}</h3>
-            <span className="tag-flag shrink-0" style={{ background: chipBg[series.status] }}>
+            <h3 className="m-0 truncate text-[1.15rem] font-semibold">{series.name}</h3>
+            <span className="shrink-0 text-[0.72rem] font-semibold uppercase tracking-wide" style={{ color: chipColor[series.status] }}>
               {chipLabel[series.status]}
             </span>
           </div>
           <p className="m-0 mt-1.5 truncate font-sans text-[0.86rem] text-[var(--text-dim)]">{series.note}</p>
         </div>
         <div className="shrink-0 text-right">
-          <div className="font-display text-[1.8rem] leading-none tracking-[-0.02em] sm:text-[2.2rem]">{series.value}</div>
+          <div className="font-mono text-[1.5rem] font-semibold leading-none">{series.value}</div>
           <div className="mt-1.5 font-mono text-[0.72rem] text-[var(--text-faint)]">{series.windowLabel}</div>
         </div>
       </div>
