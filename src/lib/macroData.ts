@@ -1,3 +1,5 @@
+import { MARKET_SYMBOLS } from "@/lib/markets";
+
 export type SeriesStatus = "up" | "down" | "flat" | "pending";
 
 export interface HistoryPoint {
@@ -159,8 +161,19 @@ export const macroPanels: MacroPanel[] = [
       blank("geo:gepu", "Global Policy Uncertainty", "GDP-weighted across major economies", "FRED GEPUCURRENT"),
       blank("geo:equity-uncertainty", "Equity Market Uncertainty", "News + options-based, daily", "FRED WLEMUINDXD"),
       blank("geo:defense-spy", "Defense / Market Ratio", "ITA vs SPY — risk-on tilt toward defense names", "Yahoo Finance ITA / SPY"),
-      blank("geo:news-feed", "News Sentiment", "Pooled headlines, keyword-lexicon scored", "Yahoo Finance RSS"),
+      blank("geo:news-feed", "News Sentiment", "Pooled macro headlines, keyword-lexicon scored", "CNBC · Fed · WSJ · Yahoo · FXStreet"),
     ],
+  },
+  {
+    // Not shown in the main nav — pulled directly by id from the News page's
+    // asset tabs. Kept as its own panel only so getPanels() has a catalogue
+    // entry to hydrate against.
+    id: "asset-news",
+    title: "Asset News",
+    description: "Per-asset headline sentiment.",
+    series: MARKET_SYMBOLS.map((m) =>
+      blank(`asset-news:${m.symbol}`, `${m.label} News`, "Ticker-specific headlines, keyword-lexicon scored", `Yahoo Finance RSS (${m.symbol})`)
+    ),
   },
   {
     id: "volatility",

@@ -1,4 +1,4 @@
-import { fetchRssHeadlines } from "@/lib/rss";
+import { fetchRssHeadlines, type RssItem } from "@/lib/rss";
 import { scoreSentiment } from "@/lib/sentiment";
 
 /**
@@ -24,19 +24,12 @@ export interface NewsItem {
   sentimentLabel: "bullish" | "bearish" | "neutral";
 }
 
-/** Fetches headlines across macro news desks, dedupes by title, scores each, sorts newest first. */
-export async function fetchNewsFeed(maxItems = 120): Promise<NewsItem[]> {
-  const results = await Promise.all(
-    NEWS_SOURCES.map(async (src) => {
-      const items = await fetchRssHeadlines(src.url);
-      return items.map((h) => ({ ...h, source: src.label }));
-    })
-  );
-
+/** Dedupes by title, scores each headline, sorts newest first. */
+function mergeAndScore(results: { source: string; items: RssItem[] }[], maxItems: number): NewsItem[] {
   const seen = new Set<string>();
   const merged: NewsItem[] = [];
 
-  for (const items of results) {
+  for (const { source, items } of results) {
     for (const h of items) {
       const key = h.title.toLowerCase().trim();
       if (seen.has(key)) continue;
@@ -46,7 +39,7 @@ export async function fetchNewsFeed(maxItems = 120): Promise<NewsItem[]> {
         title: h.title,
         link: h.link,
         pubDate: h.pubDate ?? new Date().toISOString(),
-        source: h.source,
+        source,
         sentimentScore: sentiment.score,
         sentimentLabel: sentiment.label,
       });
@@ -55,4 +48,42 @@ export async function fetchNewsFeed(maxItems = 120): Promise<NewsItem[]> {
 
   merged.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
   return merged.slice(0, maxItems);
+}
+
+/**
+ * Recency-weighted average sentiment — a headline from 10 minutes ago should
+ * move the live score more than one from yesterday. Exponential decay,
+ * half-life in hours: a headline's weight halves every `halfLifeHours`.
+ */
+export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 6): number {
+  if (items.length === 0) return 0;
+  const now = Date.now();
+  let weightSum = 0;
+  let scoreSum = 0;
+  for (const it of items) {
+    const ageHours = Math.max(0, (now - new Date(it.pubDate).getTime()) / 3_600_000);
+    const weight = Math.pow(0.5, ageHours / halfLifeHours);
+    weightSum += weight;
+    scoreSum += weight * it.sentimentScore;
+  }
+  return weightSum > 0 ? scoreSum / weightSum : 0;
+}
+
+/** Fetches headlines across macro news desks — the "general" feed. */
+export async function fetchNewsFeed(maxItems = 120): Promise<NewsItem[]> {
+  const results = await Promise.all(
+    NEWS_SOURCES.map(async (src) => ({ source: src.label, items: await fetchRssHeadlines(src.url) }))
+  );
+  return mergeAndScore(results, maxItems);
+}
+
+/**
+ * Asset-specific feed for a single ticker — this is exactly what the Yahoo
+ * per-ticker headline RSS is actually good at (it was wrong for the pooled
+ * "general" feed, which needs real macro desks instead).
+ */
+export async function fetchAssetNewsFeed(symbol: string, maxItems = 40): Promise<NewsItem[]> {
+  const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(symbol)}&region=US&lang=en-US`;
+  const items = await fetchRssHeadlines(url);
+  return mergeAndScore([{ source: `Yahoo Finance ${symbol}`, items }], maxItems);
 }

@@ -15,6 +15,8 @@ import { MARKET_SYMBOLS } from "@/lib/markets";
 import { getSignTone } from "@/lib/bias";
 
 const DEEP_PANELS = new Set(["us-macro", "yield-rates", "cot-positioning", "transmission", "geopolitics", "volatility"]);
+/** Catalogue-only panels — carry data (e.g. per-asset news) but never show up as their own nav entry. */
+const HIDDEN_PANELS = new Set(["asset-news"]);
 const BOARD_ID = "board";
 const NEWS_ID = "news";
 const CUSTOM_DASHBOARD_ID = "custom-dashboard";
@@ -87,7 +89,9 @@ export default function DashboardShell({
   const [activeId, setActiveId] = useState(BOARD_ID);
   const [assetFilter, setAssetFilter] = useState<string>("");
   const [navOpen, setNavOpen] = useState(false);
-  const active = panels.find((p) => p.id === activeId);
+  const [newsAssetTab, setNewsAssetTab] = useState<string>(""); // "" = general macro feed
+  const visiblePanels = panels.filter((p) => !HIDDEN_PANELS.has(p.id));
+  const active = visiblePanels.find((p) => p.id === activeId);
   const pickPage = (id: string) => {
     setActiveId(id);
     setNavOpen(false);
@@ -97,7 +101,11 @@ export default function DashboardShell({
   const isCustomDashboard = activeId === CUSTOM_DASHBOARD_ID;
   const isCustomBias = activeId === CUSTOM_BIAS_ID;
   const assetLabel = MARKET_SYMBOLS.find((m) => m.symbol === assetFilter)?.label ?? null;
-  const newsSeries = panels.flatMap((p) => p.series).find((s) => s.id === "geo:news-feed") ?? null;
+  const allSeries = panels.flatMap((p) => p.series);
+  const newsSeries = allSeries.find((s) => s.id === "geo:news-feed") ?? null;
+  const activeNewsSeries = newsAssetTab
+    ? allSeries.find((s) => s.id === `asset-news:${newsAssetTab}`) ?? null
+    : newsSeries;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -189,7 +197,7 @@ export default function DashboardShell({
             <div className="my-2 border-t border-[var(--border)]" />
 
             <NavButton isActive={isNews} onClick={() => pickPage(NEWS_ID)} icon="news" title="News" subtitle="headline sentiment" />
-            {panels.map((panel) => {
+            {visiblePanels.map((panel) => {
               const { bull, bear } = panelSignals(panel);
               return (
                 <NavButton
@@ -233,7 +241,7 @@ export default function DashboardShell({
           </nav>
 
           <div className="border-t border-[var(--border)] px-5 py-3.5 font-mono text-[0.66rem] text-[var(--text-faint)]">
-            {panels.reduce((n, p) => n + p.series.length, 0)} live series
+            {visiblePanels.reduce((n, p) => n + p.series.length, 0)} live series
           </div>
         </aside>
 
@@ -242,17 +250,50 @@ export default function DashboardShell({
             <>
               <header className="mb-4 flex items-baseline gap-3">
                 <h1 className="font-display m-0 text-[1.4rem] uppercase leading-none tracking-[-0.02em]">Board</h1>
-                <span className="eyebrow">{panels.reduce((n, p) => n + p.series.filter((s) => s.id !== "geo:news-feed").length, 0)} indicators, one screen</span>
+                <span className="eyebrow">{visiblePanels.reduce((n, p) => n + p.series.filter((s) => s.id !== "geo:news-feed").length, 0)} indicators, one screen</span>
               </header>
-              <BoardPage panels={panels} />
+              <BoardPage panels={visiblePanels} />
             </>
           ) : isNews ? (
             <>
-              <header className="mb-10">
+              <header className="mb-6">
                 <div className="eyebrow mb-2">Headline sentiment</div>
                 <h1 className="font-display m-0 text-balance text-[2.6rem] uppercase leading-none tracking-[-0.03em] sm:text-[3.4rem]">News</h1>
               </header>
-              {newsSeries ? <NewsFeedCard series={newsSeries} /> : <p className="font-sans text-[0.85rem] text-[var(--text-faint)]">No news data yet.</p>}
+
+              <div className="mb-6 flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setNewsAssetTab("")}
+                  className="rounded-full border px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-wide transition-colors"
+                  style={
+                    newsAssetTab === ""
+                      ? { borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 10%, transparent)" }
+                      : { borderColor: "var(--border)", color: "var(--text-faint)" }
+                  }
+                >
+                  General
+                </button>
+                {MARKET_SYMBOLS.map((m) => (
+                  <button
+                    key={m.symbol}
+                    onClick={() => setNewsAssetTab(m.symbol)}
+                    className="rounded-full border px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-wide transition-colors"
+                    style={
+                      newsAssetTab === m.symbol
+                        ? { borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 10%, transparent)" }
+                        : { borderColor: "var(--border)", color: "var(--text-faint)" }
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {activeNewsSeries ? (
+                <NewsFeedCard key={activeNewsSeries.id} series={activeNewsSeries} />
+              ) : (
+                <p className="font-sans text-[0.85rem] text-[var(--text-faint)]">No news data yet.</p>
+              )}
             </>
           ) : isCustomDashboard ? (
             <>

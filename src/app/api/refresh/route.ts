@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseServer";
 import { fetchFredHistory, statusFromDelta, fmt } from "@/lib/fred";
 import { fetchCotSeries, cotIndex, fmtNet, COT_CODES, type CotPoint } from "@/lib/cftc";
 import { fetchYahooHistory, ratioSeriesDated, toDatedSeries } from "@/lib/yahoo";
-import { fetchNewsFeed } from "@/lib/news";
+import { fetchNewsFeed, fetchAssetNewsFeed, weightedSentimentAvg } from "@/lib/news";
 import {
   computeStats,
   lastValidPair,
@@ -38,6 +38,7 @@ interface UpsertRow {
   history?: HistPoint[] | null;
   extra_stats?: ExtraStat[] | null;
   payload?: SeriesPayload | null;
+  updated_at?: string;
 }
 
 /** Rows that older versions of this route wrote and the app no longer reads. */
@@ -1235,15 +1236,15 @@ export async function GET(req: NextRequest) {
         .map((item) => ({ date: item.pubDate, value: item.sentimentScore }));
       const bull = newsItems.filter((n) => n.sentimentLabel === "bullish").length;
       const bear = newsItems.filter((n) => n.sentimentLabel === "bearish").length;
-      const avgScore = newsItems.reduce((a, n) => a + n.sentimentScore, 0) / newsItems.length;
+      const avgScore = weightedSentimentAvg(newsItems);
       rows.push({
         id: "geo:news-feed",
         panel_id: "geopolitics",
         name: "News Sentiment",
-        note: "Pooled headlines, keyword-lexicon scored",
+        note: "Pooled macro headlines, keyword-lexicon scored",
         value: `${bull}▲ ${bear}▼`,
         status: avgScore > 0.05 ? "up" : avgScore < -0.05 ? "down" : "flat",
-        source: "Yahoo Finance RSS × 12 tickers",
+        source: "CNBC · Fed · WSJ · Yahoo · FXStreet",
         zscore: null,
         sparkline: null,
         window_label: `${newsItems.length} headlines`,
@@ -1251,6 +1252,35 @@ export async function GET(req: NextRequest) {
         payload: { headlines: newsItems.slice(0, 100) },
       });
     }
+
+    // ---- Asset-specific news feeds (one per tradable symbol) ----
+    await Promise.all(
+      MARKET_SYMBOLS.map(async (m) => {
+        const items = await fetchAssetNewsFeed(m.symbol, 40);
+        if (items.length === 0) return;
+        const sentimentHistory: HistPoint[] = items
+          .slice()
+          .reverse()
+          .map((item) => ({ date: item.pubDate, value: item.sentimentScore }));
+        const bull = items.filter((n) => n.sentimentLabel === "bullish").length;
+        const bear = items.filter((n) => n.sentimentLabel === "bearish").length;
+        const avgScore = weightedSentimentAvg(items);
+        rows.push({
+          id: `asset-news:${m.symbol}`,
+          panel_id: "asset-news",
+          name: `${m.label} News`,
+          note: "Ticker-specific headlines, keyword-lexicon scored",
+          value: `${bull}▲ ${bear}▼`,
+          status: avgScore > 0.05 ? "up" : avgScore < -0.05 ? "down" : "flat",
+          source: `Yahoo Finance RSS (${m.symbol})`,
+          zscore: null,
+          sparkline: null,
+          window_label: `${items.length} headlines`,
+          history: sentimentHistory,
+          payload: { headlines: items },
+        });
+      })
+    );
 
     // ================= TRANSMISSION =================
 
@@ -1410,6 +1440,12 @@ export async function GET(req: NextRequest) {
     );
 
     // ---- Upsert, tolerating a missing payload column (pre-migration DBs) ----
+    // updated_at has a DB default that only fires on INSERT, not on the
+    // UPDATE half of an upsert — stamp it explicitly so "synced HH:MM" in
+    // the UI reflects the actual last refresh, not the row's original insert time.
+    const nowIso = new Date().toISOString();
+    for (const r of rows) r.updated_at = nowIso;
+
     let payloadColumnMissing = false;
     let { error } = await supabaseAdmin.from("macro_series").upsert(rows, { onConflict: "id" });
     if (error && /payload/i.test(error.message)) {
