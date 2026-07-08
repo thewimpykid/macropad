@@ -119,24 +119,25 @@ body {
  */
 .wireframe-bg {
   position: fixed;
-  top: -8vh;
-  right: -14vw;
-  width: min(64vw, 820px);
-  height: auto;
-  opacity: 0.4;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  object-position: center 30%;
+  opacity: 0.22;
   pointer-events: none;
   z-index: 0;
   user-select: none;
 }
 
 :root[data-theme="light"] .wireframe-bg {
-  opacity: 0.16;
+  opacity: 0.1;
   filter: invert(1);
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) .wireframe-bg {
-    opacity: 0.16;
+    opacity: 0.1;
     filter: invert(1);
   }
 }
