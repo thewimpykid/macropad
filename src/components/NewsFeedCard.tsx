@@ -1,27 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { AreaChart, Area, ReferenceLine, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import type { MacroSeries } from "@/lib/macroData";
 import NewsGlobe from "@/components/NewsGlobe";
 
 function fmtDateTime(d: string) {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      className="shrink-0 text-[var(--text-faint)] transition-transform duration-200"
-      style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-    >
-      <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 const toneColor: Record<"bullish" | "bearish" | "neutral", string> = {
@@ -45,13 +29,12 @@ const chipLabel: Record<MacroSeries["status"], string> = {
 };
 
 export default function NewsFeedCard({ series }: { series: MacroSeries }) {
-  const [open, setOpen] = useState(false);
   const headlines = series.payload?.headlines ?? [];
   const history = series.history ?? [];
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)]">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 p-4 text-left sm:gap-4 sm:p-7">
+      <div className="flex w-full items-center gap-3 p-4 text-left sm:gap-4 sm:p-7">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="m-0 truncate text-[1.2rem] font-semibold">{series.name}</h3>
@@ -65,12 +48,10 @@ export default function NewsFeedCard({ series }: { series: MacroSeries }) {
           <div className="font-mono text-[1.5rem] font-semibold leading-none">{series.value}</div>
           <div className="mt-1 font-mono text-[0.72rem] text-[var(--text-faint)]">{series.windowLabel}</div>
         </div>
-        <Chevron open={open} />
-      </button>
+      </div>
 
-      {open && (
-        <div className="border-t border-[var(--border)] p-4 pt-5 sm:p-7 sm:pt-6">
-          {headlines.length === 0 ? (
+      <div className="border-t border-[var(--border)] p-4 pt-5 sm:p-7 sm:pt-6">
+        {headlines.length === 0 ? (
             <p className="m-0 font-sans text-[0.85rem] text-[var(--text-faint)]">No headlines available right now.</p>
           ) : (
             <>
@@ -138,8 +119,7 @@ export default function NewsFeedCard({ series }: { series: MacroSeries }) {
               </div>
             </>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

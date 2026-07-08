@@ -200,9 +200,6 @@ export default function DashboardShell({
 
           <nav className="flex flex-1 flex-col gap-1 p-3">
             <NavButton isActive={isNews} onClick={() => pickPage(NEWS_ID)} icon="news" title="News" subtitle="headline sentiment" />
-
-            <div className="my-2 border-t border-[var(--border)]" />
-
             {panels.map((panel) => {
               const { bull, bear } = panelSignals(panel);
               return (
