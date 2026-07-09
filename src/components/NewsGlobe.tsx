@@ -27,25 +27,93 @@ function latLonToVec3(lat: number, lon: number, radius: number): [number, number
   return [-radius * Math.sin(phi) * Math.cos(theta), radius * Math.cos(phi), radius * Math.sin(phi) * Math.sin(theta)];
 }
 
+/** Soft round-dot texture so points render as glows, not hard squares. */
+function makeDotTexture(hardness: number): THREE.Texture {
+  const size = 64;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(hardness, "rgba(255,255,255,0.85)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function hash01(i: number): number {
+  const x = Math.sin(i * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 function LandDots() {
+  const texture = useMemo(() => makeDotTexture(0.4), []);
   const geometry = useMemo(() => {
     const n = LAND_DOTS.length / 2;
     const positions = new Float32Array(n * 3);
+    const colors = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const [x, y, z] = latLonToVec3(LAND_DOTS[i * 2], LAND_DOTS[i * 2 + 1], R);
       positions[i * 3] = x;
       positions[i * 3 + 1] = y;
       positions[i * 3 + 2] = z;
+      // Uneven brightness so the landmass reads as texture, not a stencil.
+      const b = 0.45 + hash01(i) * 0.55;
+      colors[i * 3] = b * 0.94;
+      colors[i * 3 + 1] = b * 0.95;
+      colors[i * 3 + 2] = b;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     return geo;
   }, []);
 
   return (
     <points geometry={geometry}>
-      <pointsMaterial color="#f4f4f5" size={0.05} sizeAttenuation transparent opacity={0.6} depthWrite={false} />
+      <pointsMaterial
+        map={texture}
+        vertexColors
+        size={0.075}
+        sizeAttenuation
+        transparent
+        opacity={0.85}
+        depthWrite={false}
+        alphaTest={0.05}
+      />
     </points>
+  );
+}
+
+/** Thin additive rim so the sphere reads as an atmosphere-lit body. */
+function Atmosphere() {
+  const texture = useMemo(() => {
+    const size = 256;
+    const c = document.createElement("canvas");
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext("2d")!;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0.0, "rgba(255,255,255,0)");
+    g.addColorStop(0.64, "rgba(255,255,255,0)");
+    g.addColorStop(0.72, "rgba(190,205,255,0.16)");
+    g.addColorStop(0.78, "rgba(190,205,255,0.05)");
+    g.addColorStop(1.0, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
+  return (
+    <sprite scale={[R * 2.9, R * 2.9, 1]} renderOrder={-1}>
+      <spriteMaterial map={texture} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+    </sprite>
   );
 }
 
@@ -73,25 +141,44 @@ function NewsDot({
   position,
   color,
   active,
+  glows,
+  glowTexture,
   onHover,
 }: {
   position: [number, number, number];
   color: string;
   active: boolean;
+  /** Only directional (bullish/bearish) stories glow - dozens of stacked neutral glows would white out a cluster. */
+  glows: boolean;
+  glowTexture: THREE.Texture;
   onHover: (hovered: boolean) => void;
 }) {
+  const glow = active ? 0.42 : 0.26;
   return (
-    <mesh
-      position={position}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        onHover(true);
-      }}
-      onPointerOut={() => onHover(false)}
-    >
-      <sphereGeometry args={[active ? 0.075 : 0.048, 12, 12]} />
-      <meshBasicMaterial color={color} />
-    </mesh>
+    <group position={position}>
+      <mesh
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          onHover(true);
+        }}
+        onPointerOut={() => onHover(false)}
+      >
+        <sphereGeometry args={[active ? 0.07 : 0.045, 12, 12]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+      {(glows || active) && (
+        <sprite scale={[glow, glow, 1]} renderOrder={2}>
+          <spriteMaterial
+            map={glowTexture}
+            color={color}
+            transparent
+            opacity={active ? 0.9 : 0.35}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </sprite>
+      )}
+    </group>
   );
 }
 
@@ -100,6 +187,7 @@ export default function NewsGlobe({ headlines }: { headlines: NewsHeadlinePayloa
   const [pinnedIdx, setPinnedIdx] = useState<number | null>(null);
   const [inView, setInView] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const glowTexture = useMemo(() => (typeof document !== "undefined" ? makeDotTexture(0.12) : null), []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -149,15 +237,19 @@ export default function NewsGlobe({ headlines }: { headlines: NewsHeadlinePayloa
               <Body />
               <Graticule />
               <LandDots />
-              {points.map((p, i) => (
-                <NewsDot
-                  key={i}
-                  position={p.pos}
-                  color={toneColor(p.headline.sentimentLabel)}
-                  active={activeIdx === i}
-                  onHover={(hovered) => setHoverIdx(hovered ? i : null)}
-                />
-              ))}
+              <Atmosphere />
+              {glowTexture &&
+                points.map((p, i) => (
+                  <NewsDot
+                    key={i}
+                    position={p.pos}
+                    color={toneColor(p.headline.sentimentLabel)}
+                    active={activeIdx === i}
+                    glows={p.headline.sentimentLabel !== "neutral"}
+                    glowTexture={glowTexture}
+                    onHover={(hovered) => setHoverIdx(hovered ? i : null)}
+                  />
+                ))}
               <OrbitControls
                 enablePan={false}
                 minDistance={3.4}

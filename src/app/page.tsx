@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
 import RegimeStrip from "@/components/marketing/RegimeStrip";
-import AsciiContour from "@/components/fx/AsciiContour";
 import Reveal from "@/components/fx/Reveal";
 import { macroPanels } from "@/lib/macroData";
 
@@ -46,18 +45,8 @@ export default function LandingPage() {
       <MarketingNav />
 
       <main className="flex-1">
-        {/* Hero — the regime as terrain */}
-        <section className="relative overflow-hidden border-b border-[var(--border)]">
-          <AsciiContour className="pointer-events-none absolute inset-0 h-full w-full" maxAlpha={0.5} />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 70% 60% at 30% 28%, transparent 0%, color-mix(in srgb, var(--bg) 82%, transparent) 60%, var(--bg) 92%)",
-            }}
-          />
-
+        {/* Hero — the regime as terrain (site-wide backdrop shows through) */}
+        <section className="relative border-b border-[var(--border)]">
           <div className="relative mx-auto max-w-[1120px] px-5 pt-20 sm:px-8 sm:pt-28">
             <div className="eyebrow mb-6 flex items-center gap-2">
               <span className="relative flex h-1.5 w-1.5">
@@ -85,7 +74,7 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            <div className="partno mt-8">
+            <div className="partno mt-8 w-fit bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] py-1" style={{ color: "var(--text-dim)" }}>
               SRC: FRED · CFTC · US TREASURY · CBOE — SYNCED DAILY 13:00 UTC
             </div>
 
@@ -134,7 +123,7 @@ export default function LandingPage() {
         </section>
 
         {/* Coverage catalog teaser */}
-        <section className="border-b border-[var(--border)] bg-[var(--panel)]">
+        <section className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--panel)_62%,transparent)]">
           <div className="mx-auto max-w-[1120px] px-5 py-24 sm:px-8">
             <Reveal>
               <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
@@ -179,13 +168,7 @@ export default function LandingPage() {
         </section>
 
         {/* CTA */}
-        <section className="relative overflow-hidden">
-          <AsciiContour className="pointer-events-none absolute inset-0 h-full w-full" maxAlpha={0.24} />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{ background: "radial-gradient(ellipse 55% 60% at 50% 50%, var(--bg) 25%, transparent 100%)" }}
-          />
+        <section className="relative">
           <div className="relative mx-auto max-w-[1120px] px-5 py-28 text-center sm:px-8">
             <Reveal>
               <h2 className="font-display m-0 text-[2rem] leading-[1.05] sm:text-[2.8rem]">

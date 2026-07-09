@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import TerrainBackdrop from "@/components/fx/TerrainBackdrop";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,7 +32,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${jetMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text)]">
-        {children}
+        <TerrainBackdrop />
+        <div className="relative flex min-h-full flex-1 flex-col">{children}</div>
         <Analytics />
       </body>
     </html>

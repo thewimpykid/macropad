@@ -2,7 +2,6 @@ import Link from "next/link";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
 import Reveal from "@/components/fx/Reveal";
-import AsciiContour from "@/components/fx/AsciiContour";
 
 export const metadata = {
   title: "Pricing — Macropad",
@@ -54,13 +53,7 @@ export default function PricingPage() {
       <MarketingNav />
 
       <main className="flex-1">
-        <section className="relative overflow-hidden border-b border-[var(--border)]">
-          <AsciiContour className="pointer-events-none absolute inset-0 h-full w-full" maxAlpha={0.32} />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{ background: "radial-gradient(ellipse 70% 80% at 28% 40%, var(--bg) 35%, transparent 100%)" }}
-          />
+        <section className="relative border-b border-[var(--border)]">
           <div className="relative mx-auto max-w-[1120px] px-5 pb-16 pt-20 sm:px-8 sm:pt-24">
             <div className="eyebrow mb-4">Pricing</div>
             <h1 className="display-hero m-0 max-w-2xl text-[2.4rem] sm:text-[3.4rem]">

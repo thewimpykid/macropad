@@ -95,8 +95,8 @@ export function locateHeadline(h: NewsHeadlinePayload, index: number): GeoPoint 
 
   // Spread co-located stories into a small cluster around the anchor.
   return {
-    lat: Math.max(-85, Math.min(85, anchor.lat + hash(index, 1) * 4.5)),
-    lon: anchor.lon + hash(index, 2) * 4.5,
+    lat: Math.max(-85, Math.min(85, anchor.lat + hash(index, 1) * 7)),
+    lon: anchor.lon + hash(index, 2) * 7,
     place: anchor.place,
   };
 }
