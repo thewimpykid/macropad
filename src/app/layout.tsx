@@ -16,7 +16,7 @@ const jetMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Macropad — the regime desk",
+  title: "Trifekta — the regime desk",
   description:
     "Live macro desk: US macro, yield rates, COT positioning, transmission, volatility - regime signals and per-asset net bias.",
 };

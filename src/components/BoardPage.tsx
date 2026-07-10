@@ -34,7 +34,7 @@ export default function BoardPage({ panels, newsSeries }: { panels: MacroPanel[]
       {newsSeries.length > 0 && (
         <section>
           <div className="mb-2 flex items-baseline gap-3">
-            <span className="partno">MP-00 NEWS SENTIMENT</span>
+            <span className="partno">TF-00 NEWS SENTIMENT</span>
           </div>
           <div className="grid grid-cols-1 gap-px overflow-hidden border border-[var(--border)] bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {newsSeries.map((s) => (
@@ -51,7 +51,7 @@ export default function BoardPage({ panels, newsSeries }: { panels: MacroPanel[]
           <section key={panel.id}>
             <div className="mb-2 flex items-baseline gap-3">
               <span className="partno">
-                MP-{String(i + 1).padStart(2, "0")} {panel.title.toUpperCase()}
+                TF-{String(i + 1).padStart(2, "0")} {panel.title.toUpperCase()}
               </span>
             </div>
             <div className="grid grid-cols-1 gap-px overflow-hidden border border-[var(--border)] bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

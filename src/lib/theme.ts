@@ -10,18 +10,24 @@ export const ACCENT_PRESETS: { id: AccentPreset; label: string; swatch: string }
   { id: "red", label: "Red", swatch: "#f0555d" },
 ];
 
-const THEME_KEY = "macropad:theme";
-const ACCENT_KEY = "macropad:accent";
+const THEME_KEY = "trifekta:theme";
+const ACCENT_KEY = "trifekta:accent";
+// Pre-rebrand keys - read as fallback so existing users keep their settings.
+const LEGACY_THEME_KEY = "macropad:theme";
+const LEGACY_ACCENT_KEY = "macropad:accent";
 
 /** Inlined into a blocking <script> in layout.tsx so theme applies before first paint - keep in sync if this logic changes. */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(
-  THEME_KEY
-)});var a=localStorage.getItem(${JSON.stringify(ACCENT_KEY)});if(t==="light")document.documentElement.setAttribute("data-theme","light");if(a&&a!=="mono")document.documentElement.setAttribute("data-accent",a);}catch(e){}})();`;
+export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)})||localStorage.getItem(${JSON.stringify(
+  LEGACY_THEME_KEY
+)});var a=localStorage.getItem(${JSON.stringify(ACCENT_KEY)})||localStorage.getItem(${JSON.stringify(
+  LEGACY_ACCENT_KEY
+)});if(t==="light")document.documentElement.setAttribute("data-theme","light");if(a&&a!=="mono")document.documentElement.setAttribute("data-accent",a);}catch(e){}})();`;
 
 export function loadThemePrefs(): { theme: ThemeMode; accent: AccentPreset } {
   if (typeof window === "undefined") return { theme: "dark", accent: "mono" };
-  const theme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
-  const storedAccent = localStorage.getItem(ACCENT_KEY);
+  const storedTheme = localStorage.getItem(THEME_KEY) ?? localStorage.getItem(LEGACY_THEME_KEY);
+  const theme = storedTheme === "light" ? "light" : "dark";
+  const storedAccent = localStorage.getItem(ACCENT_KEY) ?? localStorage.getItem(LEGACY_ACCENT_KEY);
   const accent = (ACCENT_PRESETS.find((p) => p.id === storedAccent)?.id ?? "mono") as AccentPreset;
   return { theme, accent };
 }

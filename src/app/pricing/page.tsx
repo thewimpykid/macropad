@@ -4,7 +4,7 @@ import MarketingFooter from "@/components/marketing/MarketingFooter";
 import Reveal from "@/components/fx/Reveal";
 
 export const metadata = {
-  title: "Pricing — Macropad",
+  title: "Pricing — Trifekta",
   description: "Launch pricing: the full desk, free during the trial window.",
 };
 
@@ -39,7 +39,7 @@ const FAQ = [
   },
   {
     q: "Do I need to connect my own accounts?",
-    a: "No. Macropad pulls and scores everything server-side. You just open the board.",
+    a: "No. Trifekta pulls and scores everything server-side. You just open the board.",
   },
   {
     q: "What happens after the trial?",
@@ -109,7 +109,7 @@ export default function PricingPage() {
                     This is launch pricing, not the price.
                   </h2>
                   <p className="m-0 mt-4 font-sans text-[0.92rem] leading-relaxed text-[var(--text-dim)]">
-                    Macropad just launched. Free access is how the board gets in front of real desks while we find
+                    Trifekta just launched. Free access is how the board gets in front of real desks while we find
                     out what's worth charging for — it is not a permanent tier.
                   </p>
                 </div>

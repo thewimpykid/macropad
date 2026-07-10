@@ -62,7 +62,7 @@ function Wordmark({ compact = false }: { compact?: boolean }) {
     <span className="flex select-none items-center gap-2.5 whitespace-nowrap">
       <BrandMark size={compact ? 18 : 22} className="shrink-0" />
       <span className={`font-mono font-bold tracking-[0.2em] text-[var(--text)] ${compact ? "text-[0.8rem]" : "text-[0.88rem]"}`}>
-        MACROPAD<span className="blink-cursor text-[var(--text-faint)]">_</span>
+        TRIFEKTA<span className="blink-cursor text-[var(--text-faint)]">_</span>
       </span>
     </span>
   );
@@ -517,7 +517,7 @@ export default function DashboardShell({
             <>
               <header className="mb-8">
                 <div className="partno mb-2">
-                  MP-{String(visiblePanels.findIndex((p) => p.id === active.id) + 1).padStart(2, "0")}
+                  TF-{String(visiblePanels.findIndex((p) => p.id === active.id) + 1).padStart(2, "0")}
                 </div>
                 <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
                   <Scramble text={pageTitle} />

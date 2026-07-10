@@ -68,7 +68,7 @@ export default async function RegimeStrip() {
           <div key={panel.id} className="flex items-stretch gap-px">
             <div className="flex w-[7.5rem] shrink-0 items-center bg-[var(--panel)] px-3 sm:w-[10rem]">
               <span className="partno truncate">
-                MP-{String(i + 1).padStart(2, "0")} {panel.label}
+                TF-{String(i + 1).padStart(2, "0")} {panel.label}
               </span>
             </div>
             <div className="flex min-w-0 flex-1 gap-px">

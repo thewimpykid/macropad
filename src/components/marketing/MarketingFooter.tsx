@@ -25,8 +25,8 @@ export default function MarketingFooter() {
           <div>
             <div className="eyebrow mb-3">Company</div>
             <div className="flex flex-col gap-2.5">
-              <a href="mailto:hello@macropad.io" className="font-sans text-[0.82rem] text-[var(--text-dim)] transition-colors duration-150 hover:text-[var(--text)]">Contact</a>
-              <a href="mailto:hello@macropad.io" className="font-sans text-[0.82rem] text-[var(--text-dim)] transition-colors duration-150 hover:text-[var(--text)]">Support</a>
+              <a href="mailto:hello@trifekta.app" className="font-sans text-[0.82rem] text-[var(--text-dim)] transition-colors duration-150 hover:text-[var(--text)]">Contact</a>
+              <a href="mailto:hello@trifekta.app" className="font-sans text-[0.82rem] text-[var(--text-dim)] transition-colors duration-150 hover:text-[var(--text)]">Support</a>
             </div>
           </div>
           <div>
@@ -42,7 +42,7 @@ export default function MarketingFooter() {
       <div className="border-t border-[var(--border)] px-5 py-5 sm:px-8">
         <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-3">
           <p className="m-0 font-mono text-[0.66rem] text-[var(--text-faint)]">
-            &copy; {new Date().getFullYear()} Macropad. Informational only — not investment advice.
+            &copy; {new Date().getFullYear()} Trifekta. Informational only — not investment advice.
           </p>
           <p className="m-0 font-mono text-[0.66rem] text-[var(--text-faint)]">Made for the regime, not the noise.</p>
         </div>

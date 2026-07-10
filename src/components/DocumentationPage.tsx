@@ -94,9 +94,9 @@ export default function DocumentationPage({ panels }: { panels: MacroPanel[] }) 
   return (
     <div className="flex flex-col gap-10">
       <div>
-        <Section title="What Macropad is">
+        <Section title="What Trifekta is">
           <p className="m-0">
-            Macropad is a live macro desk. It pulls US macroeconomic data, Treasury yields, CFTC positioning,
+            Trifekta is a live macro desk. It pulls US macroeconomic data, Treasury yields, CFTC positioning,
             cross asset transmission ratios, geopolitical uncertainty measures, volatility indices, and scored
             news headlines into one place, and rolls all of it into a per asset directional bias. The goal is a
             single screen that replaces a spreadsheet full of manually updated series.

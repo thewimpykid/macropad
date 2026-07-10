@@ -8,9 +8,9 @@ const HIDDEN_PANELS = new Set(["asset-news", "calendar"]);
 const PANELS = macroPanels.filter((p) => !HIDDEN_PANELS.has(p.id));
 
 export const metadata = {
-  title: "Coverage — Macropad",
+  title: "Coverage — Trifekta",
   description:
-    "Every panel and series Macropad tracks: US macro, yield rates, COT positioning, transmission, geopolitics, and volatility.",
+    "Every panel and series Trifekta tracks: US macro, yield rates, COT positioning, transmission, geopolitics, and volatility.",
 };
 
 export default function CoveragePage() {
@@ -28,7 +28,7 @@ export default function CoveragePage() {
               {PANELS.length} panels. {totalSeries} series.
             </h1>
             <p className="mt-5 max-w-lg font-sans text-[1rem] leading-relaxed text-[var(--text-dim)]">
-              Every input feeding the board, with the exact source behind each one. Nothing on Macropad is a
+              Every input feeding the board, with the exact source behind each one. Nothing on Trifekta is a
               black box.
             </p>
           </div>
@@ -46,7 +46,7 @@ export default function CoveragePage() {
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_2fr]">
                   <div>
                     <div className="partno mb-3">
-                      MP-{String(i + 1).padStart(2, "0")} / {String(PANELS.length).padStart(2, "0")}
+                      TF-{String(i + 1).padStart(2, "0")} / {String(PANELS.length).padStart(2, "0")}
                     </div>
                     <h2 className="font-display m-0 text-[1.5rem] leading-[1.08] sm:text-[1.8rem]">{panel.title}</h2>
                     <p className="m-0 mt-3 font-sans text-[0.88rem] leading-relaxed text-[var(--text-dim)]">

@@ -61,7 +61,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-6 max-w-xl font-sans text-[1.02rem] leading-relaxed text-[var(--text-dim)] sm:text-[1.1rem]">
-              Macropad compresses {TOTAL_SERIES} macro series — liquidity, rates, positioning, transmission,
+              Trifekta compresses {TOTAL_SERIES} macro series — liquidity, rates, positioning, transmission,
               geopolitics, volatility — into one dense board, with every read scored and every score sourced.
             </p>
 
@@ -148,7 +148,7 @@ export default function LandingPage() {
                     className="group bg-[var(--panel)] px-5 py-4 transition-colors duration-150 hover:bg-[var(--panel-2)]"
                   >
                     <div className="flex items-baseline justify-between">
-                      <span className="partno">MP-{String(i + 1).padStart(2, "0")}</span>
+                      <span className="partno">TF-{String(i + 1).padStart(2, "0")}</span>
                       <span className="font-mono text-[0.62rem] text-[var(--text-faint)]">
                         {p.series.length} series
                       </span>

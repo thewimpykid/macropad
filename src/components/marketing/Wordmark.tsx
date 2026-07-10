@@ -7,7 +7,7 @@ export default function Wordmark({ size = "md" }: { size?: "sm" | "md" | "lg" })
     <span className="flex select-none items-center gap-2.5 whitespace-nowrap">
       <BrandMark size={mark} className="shrink-0" />
       <span className={`font-mono font-bold tracking-[0.2em] text-[var(--text)] ${text}`}>
-        MACROPAD<span className="blink-cursor text-[var(--text-faint)]">_</span>
+        TRIFEKTA<span className="blink-cursor text-[var(--text-faint)]">_</span>
       </span>
     </span>
   );

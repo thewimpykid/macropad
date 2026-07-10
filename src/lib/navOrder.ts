@@ -1,4 +1,6 @@
-const NAV_ORDER_KEY = "macropad:navOrder";
+const NAV_ORDER_KEY = "trifekta:navOrder";
+// Pre-rebrand key - read as fallback so existing users keep their tab order.
+const LEGACY_NAV_ORDER_KEY = "macropad:navOrder";
 
 export interface NavOrderState {
   a: string[]; // News + indicator panels
@@ -17,7 +19,7 @@ function reconcile(stored: string[] | undefined, current: string[]): string[] {
 export function loadNavOrder(defaultA: string[], defaultB: string[]): NavOrderState {
   if (typeof window === "undefined") return { a: defaultA, b: defaultB };
   try {
-    const raw = localStorage.getItem(NAV_ORDER_KEY);
+    const raw = localStorage.getItem(NAV_ORDER_KEY) ?? localStorage.getItem(LEGACY_NAV_ORDER_KEY);
     const parsed = raw ? (JSON.parse(raw) as Partial<NavOrderState>) : undefined;
     return { a: reconcile(parsed?.a, defaultA), b: reconcile(parsed?.b, defaultB) };
   } catch {

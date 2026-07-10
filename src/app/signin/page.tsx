@@ -3,7 +3,7 @@ import AuthShell from "@/components/marketing/AuthShell";
 import SignInForm from "@/components/marketing/SignInForm";
 
 export const metadata = {
-  title: "Sign in — Macropad",
+  title: "Sign in — Trifekta",
 };
 
 export default function SignInPage() {
