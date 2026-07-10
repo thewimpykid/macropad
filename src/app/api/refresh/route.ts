@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseServer";
-import { fetchFredHistory, statusFromDelta, fmt } from "@/lib/fred";
+import { fetchFredHistory, fetchReleaseDates, statusFromDelta, fmt } from "@/lib/fred";
+import { RELEASES } from "@/lib/econCalendar";
 import { fetchCotSeries, fetchCotCategories, cotIndex, fmtNet, COT_CODES, type CotPoint, type CotCategories, type ContractClass } from "@/lib/cftc";
 import { fetchYahooHistory, ratioSeriesDated, toDatedSeries } from "@/lib/yahoo";
 import { fetchMacroNewsPool, scoreGeneralFeed, scoreAssetFeed, weightedSentimentAvg, sentimentTrend } from "@/lib/news";
@@ -19,7 +20,7 @@ import {
   type HistPoint,
 } from "@/lib/stats";
 import { computeIndicatorSignal } from "@/lib/indicatorSignal";
-import type { ExtraStat, SeriesPayload } from "@/lib/macroData";
+import type { ExtraStat, SeriesPayload, CalendarEventPayload } from "@/lib/macroData";
 import { MARKET_SYMBOLS, marketRowId } from "@/lib/markets";
 import { buildAssetIndicatorEvents } from "@/lib/assetEvents";
 
@@ -1660,6 +1661,31 @@ export async function GET(req: NextRequest) {
         payload: { headlines: merged },
       });
     }
+
+    // ================= ECONOMIC RELEASE CALENDAR =================
+    // Real dates straight from FRED's own release/dates API - not an
+    // inferred cadence - so "next CPI" etc. is the Fed's actual published
+    // schedule, including any forward-scheduled dates FRED already carries.
+    const releaseDateEntries = await Promise.all(
+      RELEASES.map(async (r) => [r, await fetchReleaseDates(r.fredReleaseId, fredKey, 30)] as const)
+    );
+    const calendarEvents: CalendarEventPayload[] = releaseDateEntries
+      .flatMap(([r, dates]) => dates.map((date) => ({ date, releaseId: r.id, label: r.label, relatedIndicatorId: r.relatedIndicatorId, importance: r.importance })))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    rows.push({
+      id: "calendar:econ-events",
+      panel_id: "calendar",
+      name: "Economic Release Calendar",
+      note: "Upcoming and recent release dates",
+      value: `${calendarEvents.length} events`,
+      status: "flat",
+      source: "FRED release/dates API",
+      zscore: null,
+      sparkline: null,
+      window_label: "~30 dates per release",
+      history: null,
+      payload: { events: calendarEvents },
+    });
 
     // ================= MARKET TICKERS =================
     // Weekly bars for display/correlation; daily bars (payload) let the

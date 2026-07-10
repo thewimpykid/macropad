@@ -61,6 +61,28 @@ const ICONS: Record<string, React.ReactNode> = {
       <circle cx="10" cy="15" r="1.3" />
     </>
   ),
+  replay: (
+    <>
+      <path d="M6 4L6 16" />
+      <path d="M6 10L14.5 4.5V15.5Z" />
+    </>
+  ),
+  fingerprint: (
+    <>
+      <path d="M10 3L17 6.5V13.5L10 17L3 13.5V6.5Z" />
+      <path d="M10 3V17" />
+      <path d="M3 6.5L10 10L17 6.5" />
+      <path d="M3 13.5L10 10L17 13.5" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="14" height="13" rx="1.5" />
+      <path d="M3 8H17" />
+      <path d="M6.5 2.5V5.5" />
+      <path d="M13.5 2.5V5.5" />
+    </>
+  ),
   docs: (
     <>
       <path d="M5 3H12.5L16 6.5V17H5Z" />

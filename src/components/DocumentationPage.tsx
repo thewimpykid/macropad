@@ -5,7 +5,7 @@ import type { MacroPanel } from "@/lib/macroData";
 import { getIndicatorDoc } from "@/lib/indicatorDocs";
 import { getSignalConfig, type SignalMethod } from "@/lib/indicatorSignal";
 
-const HIDDEN_PANELS = new Set(["asset-news"]);
+const HIDDEN_PANELS = new Set(["asset-news", "calendar"]);
 
 const METHOD_LABEL: Record<SignalMethod, string> = {
   momentum: "Momentum",

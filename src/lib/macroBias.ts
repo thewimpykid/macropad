@@ -398,8 +398,16 @@ function scoreHistory(seriesId: string, history: { date: string; value: number }
  * history so the indicator still reads (using its best available window)
  * instead of going blank.
  */
-function readSeries(series: MacroSeries, historyDays: number | null): { score: number | null; directional: number | null; tone: "up" | "down" | "flat"; label: string } {
-  const full = series.history;
+function readSeries(
+  series: MacroSeries,
+  historyDays: number | null,
+  asOfDate?: string
+): { score: number | null; directional: number | null; tone: "up" | "down" | "flat"; label: string } {
+  let full = series.history;
+  if (asOfDate && full) {
+    const cutoffMs = new Date(asOfDate + "T23:59:59").getTime();
+    full = full.filter((p) => new Date(p.date).getTime() <= cutoffMs);
+  }
   if (!full || full.length < 5) {
     return { score: null, directional: null, tone: "flat", label: "No history available yet" };
   }
@@ -428,6 +436,8 @@ export interface MacroBiasOptions {
   indicatorWeights?: Record<string, number>;
   /** Horizon bucket (see TimeframeDef.horizon) - applies HORIZON_PILLAR_WEIGHTS on top of indicatorWeights. */
   horizon?: TimeframeDef["horizon"];
+  /** Replay: pin "now" to this date (YYYY-MM-DD) - every series' history is truncated to this date before historyDays is applied. */
+  asOfDate?: string;
 }
 
 function weightedAverage(indicators: IndicatorRead[], weights: Record<string, number>): number | null {
@@ -463,7 +473,7 @@ export function computeMacroBias(panels: MacroPanel[], options: MacroBiasOptions
       .map((id) => seriesIndex.get(id))
       .filter((x): x is { series: MacroSeries; panelTitle: string } => x !== undefined)
       .map(({ series, panelTitle }) => {
-        const read = readSeries(series, historyDays);
+        const read = readSeries(series, historyDays, options.asOfDate);
         return { seriesId: series.id, name: series.name, panelTitle, score: read.score, directional: read.directional, tone: read.tone, label: read.label };
       });
 

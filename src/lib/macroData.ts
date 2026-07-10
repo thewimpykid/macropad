@@ -31,10 +31,19 @@ export interface NewsHeadlinePayload {
   description?: string;
 }
 
+export interface CalendarEventPayload {
+  date: string;
+  releaseId: string;
+  label: string;
+  relatedIndicatorId: string;
+  importance: "high" | "medium" | "low";
+}
+
 /** Row-specific extra data too structured for extra_stats: scored headlines, daily price bars. */
 export interface SeriesPayload {
   headlines?: NewsHeadlinePayload[];
   dailyHistory?: HistoryPoint[];
+  events?: CalendarEventPayload[];
 }
 
 export interface MacroSeries {
@@ -182,6 +191,16 @@ export const macroPanels: MacroPanel[] = [
     series: MARKET_SYMBOLS.map((m) =>
       blank(`asset-news:${m.symbol}`, `${m.label} News`, "Real indicator events (FRED/CFTC) plus matching headlines, not headline-only sentiment", "FRED · CFTC · CNBC · Fed · ECB · WSJ · FXStreet · MarketWatch")
     ),
+  },
+  {
+    // Not shown in the main nav - pulled directly by id into the dedicated
+    // Calendar page. A single synthetic row: payload.events holds the whole
+    // upcoming/recent release list, sourced from FRED's own release-dates
+    // API rather than guessed cadences.
+    id: "calendar",
+    title: "Economic Release Calendar",
+    description: "Real release dates for the indicators this board tracks, pulled from FRED's release-dates API.",
+    series: [blank("calendar:econ-events", "Economic Release Calendar", "Upcoming and recent release dates", "FRED release/dates API")],
   },
   {
     id: "volatility",

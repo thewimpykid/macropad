@@ -10,6 +10,9 @@ import MarketTicker from "@/components/MarketTicker";
 import IndicatorTicker from "@/components/IndicatorTicker";
 import PanelIcon from "@/components/PanelIcon";
 import MacroBiasPage from "@/components/MacroBiasPage";
+import ReplayPage from "@/components/ReplayPage";
+import RegimeFingerprintPage from "@/components/RegimeFingerprintPage";
+import CalendarPage from "@/components/CalendarPage";
 import BoardPage from "@/components/BoardPage";
 import DocumentationPage from "@/components/DocumentationPage";
 import { MARKET_SYMBOLS } from "@/lib/markets";
@@ -20,10 +23,13 @@ import AsciiContour from "@/components/fx/AsciiContour";
 
 const DEEP_PANELS = new Set(["us-macro", "yield-rates", "cot-positioning", "transmission", "geopolitics", "volatility"]);
 /** Catalogue-only panels - carry data (e.g. per-asset news) but never show up as their own nav entry. */
-const HIDDEN_PANELS = new Set(["asset-news"]);
+const HIDDEN_PANELS = new Set(["asset-news", "calendar"]);
 const BOARD_ID = "board";
 const NEWS_ID = "news";
 const MACRO_BIAS_ID = "macro-bias";
+const REPLAY_ID = "replay";
+const FINGERPRINT_ID = "fingerprint";
+const CALENDAR_ID = "calendar";
 const DOCS_ID = "docs";
 
 const SHORT_LABEL: Record<string, string> = {
@@ -161,6 +167,9 @@ export default function DashboardShell({
   const isBoard = activeId === BOARD_ID;
   const isNews = activeId === NEWS_ID;
   const isMacroBias = activeId === MACRO_BIAS_ID;
+  const isReplay = activeId === REPLAY_ID;
+  const isFingerprint = activeId === FINGERPRINT_ID;
+  const isCalendar = activeId === CALENDAR_ID;
   const isDocs = activeId === DOCS_ID;
   const allSeries = panels.flatMap((p) => p.series);
   const newsSeries = allSeries.find((s) => s.id === "geo:news-feed") ?? null;
@@ -193,7 +202,13 @@ export default function DashboardShell({
       ? "News"
       : isMacroBias
         ? "Macro Bias"
-        : isDocs
+        : isReplay
+          ? "Replay"
+          : isFingerprint
+            ? "Regime Fingerprint"
+            : isCalendar
+            ? "Calendar"
+            : isDocs
             ? "Documentation"
             : active?.title ?? "";
 
@@ -275,6 +290,15 @@ export default function DashboardShell({
               isActive={isMacroBias}
               onClick={() => pickPage(MACRO_BIAS_ID)}
             />
+            <NavItem index={nextIndex()} id="replay" label="REPLAY" isActive={isReplay} onClick={() => pickPage(REPLAY_ID)} />
+            <NavItem
+              index={nextIndex()}
+              id="fingerprint"
+              label="FINGERPRINT"
+              isActive={isFingerprint}
+              onClick={() => pickPage(FINGERPRINT_ID)}
+            />
+            <NavItem index={nextIndex()} id="calendar" label="CALENDAR" isActive={isCalendar} onClick={() => pickPage(CALENDAR_ID)} />
             <div className="mx-4 my-2 border-t border-[var(--border)]" />
 
             <NavItem index={nextIndex()} id="docs" label="DOCS" isActive={isDocs} onClick={() => pickPage(DOCS_ID)} />
@@ -360,6 +384,36 @@ export default function DashboardShell({
                 </h1>
               </header>
               <MacroBiasPage panels={panels} />
+            </>
+          ) : isReplay ? (
+            <>
+              <header className="mb-8">
+                <div className="eyebrow mb-2">Point-in-time scrub</div>
+                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
+                  <Scramble text="Replay" />
+                </h1>
+              </header>
+              <ReplayPage panels={panels} />
+            </>
+          ) : isFingerprint ? (
+            <>
+              <header className="mb-8">
+                <div className="eyebrow mb-2">Seven-pillar shape, then vs now</div>
+                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
+                  <Scramble text="Regime Fingerprint" />
+                </h1>
+              </header>
+              <RegimeFingerprintPage panels={panels} markets={markets} />
+            </>
+          ) : isCalendar ? (
+            <>
+              <header className="mb-8">
+                <div className="eyebrow mb-2">Real release dates</div>
+                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
+                  <Scramble text="Calendar" />
+                </h1>
+              </header>
+              <CalendarPage panels={panels} />
             </>
           ) : isDocs ? (
             <>

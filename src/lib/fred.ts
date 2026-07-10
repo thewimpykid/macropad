@@ -29,6 +29,15 @@ export async function fetchFredHistory(seriesId: string, apiKey: string, limit =
   return points.slice().reverse();
 }
 
+/** Release dates for a FRED release_id - real values (past and any future-scheduled) FRED itself publishes, not inferred cadence. */
+export async function fetchReleaseDates(releaseId: number, apiKey: string, limit = 30): Promise<string[]> {
+  const url = `https://api.stlouisfed.org/fred/release/dates?release_id=${releaseId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}&include_release_dates_with_no_data=true`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`FRED release ${releaseId} failed: ${res.status}`);
+  const data = await res.json();
+  return (data.release_dates ?? []).map((d: { date: string }) => d.date);
+}
+
 export function statusFromDelta(latest: number | null, prev: number | null): "up" | "down" | "flat" | "pending" {
   if (latest === null || prev === null) return "pending";
   if (latest > prev) return "up";

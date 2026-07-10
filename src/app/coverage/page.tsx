@@ -4,7 +4,7 @@ import MarketingFooter from "@/components/marketing/MarketingFooter";
 import Reveal from "@/components/fx/Reveal";
 import { macroPanels } from "@/lib/macroData";
 
-const HIDDEN_PANELS = new Set(["asset-news"]);
+const HIDDEN_PANELS = new Set(["asset-news", "calendar"]);
 const PANELS = macroPanels.filter((p) => !HIDDEN_PANELS.has(p.id));
 
 export const metadata = {
