@@ -22,12 +22,10 @@ import {
   movingAverage,
   rollingStd,
   momentumForCadence,
-  histogram,
   inferCadence,
 } from "@/lib/stats";
 import SeriesCard from "@/components/SeriesCard";
 import Sparkline from "@/components/Sparkline";
-import ZHeatmap from "@/components/ZHeatmap";
 import MarketLink from "@/components/MarketLink";
 import SpecializedStatChart from "@/components/SpecializedStatChart";
 import NewsFeedCard from "@/components/NewsFeedCard";
@@ -129,10 +127,6 @@ function PositioningBody({ series, history, values }: { series: MacroSeries; his
   const ma50 = movingAverage(values, maLongWindow);
   const volWindow = Math.min(20, Math.floor(values.length / 3));
   const vol = rollingStd(values, volWindow);
-  const momentum = momentumForCadence(history, cadence);
-  const lookbackPoints = cadence === "daily" ? 252 : cadence === "weekly" ? 52 : cadence === "monthly" ? 12 : 4;
-  const dist52 = computeDistStats(values.slice(-Math.min(values.length, lookbackPoints)));
-  const hist = histogram(values, 14);
 
   const chartData = history.map((h, i) => ({ date: h.date, value: h.value, ma20: ma20[i], ma50: ma50[i], z: zSeries[i], vol: vol[i] }));
   const annVolMultiplier = Math.sqrt(periodsPerYear);
@@ -200,75 +194,9 @@ function PositioningBody({ series, history, values }: { series: MacroSeries; his
         </div>
       </div>
 
-      <div className="mt-6">
-        <SectionHead title="Signal robustness" />
-        <ZHeatmap history={history} />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <div>
-          <SectionHead title="Distribution" />
-          <div className="h-[90px] w-full">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={90}>
-              <BarChart data={hist} margin={{ top: 2, right: 8, bottom: 0, left: 0 }}>
-                <XAxis dataKey="bucket" hide />
-                <YAxis hide />
-                <Tooltip contentStyle={{ background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: 3, fontSize: 12 }} labelFormatter={(b) => `≈ ${Number(b).toFixed(3)}`} formatter={(v) => [v, "count"]} />
-                <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-                  {hist.map((h, i) => (
-                    <Cell key={i} fill={dist && Math.abs(h.bucket - dist.latest) < (dist.max - dist.min) / 14 ? "var(--accent)" : "var(--border)"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {dist52 && (
-          <div>
-            <SectionHead title={cadence === "daily" || cadence === "weekly" ? "52w range" : cadence === "monthly" ? "12m range" : "4q range"} />
-            <div className="mt-3">
-              <div className="mb-1.5 flex justify-between font-mono text-[0.72rem] text-[var(--text-faint)]">
-                <span>{dist52.min.toFixed(3)}</span>
-                <span>{dist52.max.toFixed(3)}</span>
-              </div>
-              <div className="relative h-2 rounded-full bg-[var(--border)]">
-                <div
-                  className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 border-[var(--panel)] bg-[var(--accent)]"
-                  style={{ left: `${dist52.max === dist52.min ? 50 : ((dist52.latest - dist52.min) / (dist52.max - dist52.min)) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <div className="mb-1.5 font-sans text-[0.68rem] uppercase tracking-wide text-[var(--text-faint)]">Momentum - absolute change vs. N periods ago</div>
-        <div className="grid grid-cols-4 gap-2">
-          {(() => {
-            const maxAbs = Math.max(1e-9, ...momentum.map((m) => (m.value === null ? 0 : Math.abs(m.value))));
-            return momentum.map((m) => <MomentumBadge key={m.label} seriesId={series.id} label={m.label} value={m.value} maxAbs={maxAbs} />);
-          })()}
-        </div>
-      </div>
-
       {dist && (
         <div className="mt-6 border-t border-[var(--border)] pt-4">
-          <div className="mb-1.5 flex justify-between font-sans text-[0.68rem] uppercase tracking-wide text-[var(--text-faint)]">
-            <span>Full-history range</span>
-            <span className="font-mono normal-case">{dist.percentile.toFixed(0)}th percentile</span>
-          </div>
-          <div className="relative h-2 rounded-full bg-[var(--border)]">
-            <div className="absolute top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-[var(--text-faint)]" style={{ left: `${((dist.mean - dist.min) / (dist.max - dist.min || 1)) * 100}%` }} />
-            <div className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 border-[var(--panel)]" style={{ left: `${((dist.latest - dist.min) / (dist.max - dist.min || 1)) * 100}%`, background: zTone(series.id, dist.zscore) }} />
-          </div>
-          <div className="mt-1 flex justify-between font-mono text-[0.7rem] text-[var(--text-faint)]">
-            <span>{dist.min.toFixed(3)}</span>
-            <span>mean {dist.mean.toFixed(3)}</span>
-            <span>{dist.max.toFixed(3)}</span>
-          </div>
-          <div className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3 font-mono text-[0.82rem] sm:grid-cols-5">
+          <div className="grid grid-cols-3 gap-x-3 gap-y-3 font-mono text-[0.82rem] sm:grid-cols-5">
             <Stat label="Std Dev" value={dist.std.toFixed(3)} />
             <Stat label="Ann. Vol" value={annVol !== null ? annVol.toFixed(3) : "-"} />
             <Stat label="Z-score" value={`${dist.zscore > 0 ? "+" : ""}${dist.zscore.toFixed(2)}σ`} color={zTone(series.id, dist.zscore)} />

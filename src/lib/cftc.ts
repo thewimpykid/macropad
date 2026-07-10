@@ -1,4 +1,8 @@
 const BASE = "https://publicreporting.cftc.gov/resource/6dca-aqww.json";
+/** Traders in Financial Futures (futures only) - dealer / asset manager / leveraged funds, for financial contracts. */
+const TFF_BASE = "https://publicreporting.cftc.gov/resource/gpe5-46if.json";
+/** Disaggregated report (futures only) - producer/merchant / swap dealer / managed money, for physical commodities. */
+const DISAGG_BASE = "https://publicreporting.cftc.gov/resource/72hh-3qpy.json";
 
 /**
  * CFTC legacy futures-only COT, queried by contract market code - NOT display
@@ -88,4 +92,109 @@ export function fmtNet(n: number | null): string {
   if (n === null) return "-";
   const sign = n > 0 ? "+" : "";
   return `${sign}${n.toLocaleString("en-US")}`;
+}
+
+/**
+ * Which CFTC report carries a contract's trader-category breakdown:
+ * financial contracts (equity indices, treasuries, FX, VIX) live in the TFF
+ * report; physical commodities live in the Disaggregated report.
+ */
+export type ContractClass = "financial" | "commodity";
+
+export interface CotCategories {
+  /** Fast money: leveraged funds (TFF) or managed money (disaggregated). */
+  fastMoney: CotPoint[];
+  fastMoneyLabel: string;
+  /** The other side's anchor category: asset managers (TFF) or producers/merchants (disaggregated). */
+  institutional: CotPoint[];
+  institutionalLabel: string;
+}
+
+/**
+ * Column names differ per dataset AND per category within the disaggregated
+ * dataset (managed money has an `_all` suffix, producer/merchant does not) -
+ * verified against the live Socrata endpoints; a wrong name silently
+ * returns undefined and every net would read NaN.
+ */
+interface TffRow {
+  report_date_as_yyyy_mm_dd: string;
+  lev_money_positions_long: string;
+  lev_money_positions_short: string;
+  asset_mgr_positions_long: string;
+  asset_mgr_positions_short: string;
+  open_interest_all: string;
+}
+
+interface DisaggRow {
+  report_date_as_yyyy_mm_dd: string;
+  m_money_positions_long_all: string;
+  m_money_positions_short_all: string;
+  prod_merc_positions_long: string;
+  prod_merc_positions_short: string;
+  open_interest_all: string;
+}
+
+function toCotPoints<T extends { report_date_as_yyyy_mm_dd: string; open_interest_all: string }>(
+  rows: T[],
+  long: (r: T) => string,
+  short: (r: T) => string
+): CotPoint[] {
+  return rows
+    .slice()
+    .reverse()
+    .map((r) => {
+      const net = Number(long(r)) - Number(short(r));
+      const oi = Number(r.open_interest_all);
+      return {
+        date: r.report_date_as_yyyy_mm_dd.slice(0, 10),
+        net,
+        netPctOi: oi > 0 ? (net / oi) * 100 : null,
+      };
+    })
+    .filter((p) => !Number.isNaN(p.net));
+}
+
+/**
+ * Trader-category net positions for one contract, from whichever report
+ * (TFF / disaggregated) actually covers it. One fetch returns both
+ * categories - the datasets carry every category per row.
+ */
+export async function fetchCotCategories(code: string, klass: ContractClass, limit = 156): Promise<CotCategories> {
+  const base = klass === "financial" ? TFF_BASE : DISAGG_BASE;
+  const select =
+    klass === "financial"
+      ? "report_date_as_yyyy_mm_dd,lev_money_positions_long,lev_money_positions_short,asset_mgr_positions_long,asset_mgr_positions_short,open_interest_all"
+      : "report_date_as_yyyy_mm_dd,m_money_positions_long_all,m_money_positions_short_all,prod_merc_positions_long,prod_merc_positions_short,open_interest_all";
+
+  const url = new URL(base);
+  url.searchParams.set("$where", `cftc_contract_market_code = '${code}'`);
+  url.searchParams.set("$order", "report_date_as_yyyy_mm_dd DESC");
+  url.searchParams.set("$select", select);
+  url.searchParams.set("$limit", String(limit));
+
+  const empty: CotCategories =
+    klass === "financial"
+      ? { fastMoney: [], fastMoneyLabel: "Leveraged funds", institutional: [], institutionalLabel: "Asset managers" }
+      : { fastMoney: [], fastMoneyLabel: "Managed money", institutional: [], institutionalLabel: "Producers/merchants" };
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) return empty;
+  const rows = await res.json();
+
+  if (klass === "financial") {
+    const tff = rows as TffRow[];
+    return {
+      fastMoney: toCotPoints(tff, (r: TffRow) => r.lev_money_positions_long, (r: TffRow) => r.lev_money_positions_short),
+      fastMoneyLabel: "Leveraged funds",
+      institutional: toCotPoints(tff, (r: TffRow) => r.asset_mgr_positions_long, (r: TffRow) => r.asset_mgr_positions_short),
+      institutionalLabel: "Asset managers",
+    };
+  }
+  const dis = rows as DisaggRow[];
+  return {
+    fastMoney: toCotPoints(dis, (r: DisaggRow) => r.m_money_positions_long_all, (r: DisaggRow) => r.m_money_positions_short_all),
+    fastMoneyLabel: "Managed money",
+    institutional: toCotPoints(dis, (r: DisaggRow) => r.prod_merc_positions_long, (r: DisaggRow) => r.prod_merc_positions_short),
+    institutionalLabel: "Producers/merchants",
+  };
 }

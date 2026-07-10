@@ -51,6 +51,12 @@ const SIGNAL_CONFIG: Record<string, SignalConfig> = {
     band: 1.5,
     rationale: "Credit spreads have a real fair-value range: sub-3% is complacent, 3-5% normal, 6%+ stress - judged against that range, not their own multi-year history.",
   },
+  "us-macro:ig-credit-spread": {
+    method: "anchor",
+    reference: 1.3,
+    band: 0.6,
+    rationale: "IG OAS has a real fair-value range: sub-0.9% is priced-for-perfection tight, ~1.3% normal, 2%+ genuine stress - judged against that range, not its own history.",
+  },
   "us-macro:cpi-yoy": { method: "anchor", reference: 2, band: 1, rationale: "Judged against the Fed's actual 2% inflation target." },
   "us-macro:core-cpi": { method: "anchor", reference: 2, band: 1, rationale: "Core CPI judged against the same 2% target it's meant to approach." },
   "us-macro:core-pce": { method: "anchor", reference: 2, band: 1, rationale: "The Fed's actual target metric, judged directly against 2%." },

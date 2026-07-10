@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 import { fetchFredHistory, statusFromDelta, fmt } from "@/lib/fred";
-import { fetchCotSeries, cotIndex, fmtNet, COT_CODES, type CotPoint } from "@/lib/cftc";
+import { fetchCotSeries, fetchCotCategories, cotIndex, fmtNet, COT_CODES, type CotPoint, type CotCategories, type ContractClass } from "@/lib/cftc";
 import { fetchYahooHistory, ratioSeriesDated, toDatedSeries } from "@/lib/yahoo";
 import { fetchMacroNewsPool, scoreGeneralFeed, scoreAssetFeed, weightedSentimentAvg, sentimentTrend } from "@/lib/news";
 import {
@@ -102,8 +102,21 @@ export async function GET(req: NextRequest) {
   try {
     // ================= US MACRO =================
 
-    // ---- H.4.1 Fed Balance Sheet (WALCL, weekly, $ millions -> $T) ----
-    const walclHist = await fetchFredHistory("WALCL", fredKey, 520);
+    // ---- H.4.1 Fed Balance Sheet (weekly, $ millions -> $T, except RRP in $B) ----
+    // WALCL is the headline, but the release's liability detail (reserve
+    // balances, the TGA) and table 5 asset composition (USTs / MBS held
+    // outright) are what actually locate the liquidity: WALCL − TGA − RRP
+    // is the net-liquidity read traders price risk assets off.
+    const [walclHist, wresbalHist, tgaHist, treastHist, mbsHist, rrpHist] = await Promise.all([
+      fetchFredHistory("WALCL", fredKey, 520),
+      fetchFredHistory("WRESBAL", fredKey, 520),
+      fetchFredHistory("WTREGEN", fredKey, 520),
+      fetchFredHistory("TREAST", fredKey, 520),
+      fetchFredHistory("WSHOMCB", fredKey, 520),
+      fetchFredHistory("RRPONTSYD", fredKey, 750),
+    ]);
+    const toTrillions = (hist: { date: string; value: number | null }[]) =>
+      toHistory(hist.map((p) => p.date), hist.map((p) => (p.value === null ? null : p.value / 1_000_000)));
     const walclNums = walclHist.map((p) => (p.value === null ? null : p.value / 1_000_000));
     const [walclLatest, walclPrev] = lastValidPair(walclNums);
     const walclHistory = toHistory(walclHist.map((p) => p.date), walclNums);
@@ -112,6 +125,26 @@ export async function GET(req: NextRequest) {
     const walcl13wAnn = annualizedChange(walclNums, 13);
     const walcl13wHist = annualizedChangeHistory(walclHistory, 13);
     const walcl13wStats = computeStats(walcl13wHist.map((p) => p.value));
+
+    const wresbalHistory = toTrillions(wresbalHist);
+    const [wresbalLatest] = lastValidPair(wresbalHistory.map((p): number | null => p.value));
+    const wresbalStats = computeStats(wresbalHistory.map((p) => p.value));
+    const tgaHistoryB = toHistory(tgaHist.map((p) => p.date), tgaHist.map((p) => (p.value === null ? null : p.value / 1000)));
+    const [tgaLatestB] = lastValidPair(tgaHistoryB.map((p): number | null => p.value));
+    const tgaStats = computeStats(tgaHistoryB.map((p) => p.value));
+    const treastHistory = toTrillions(treastHist);
+    const [treastLatest] = lastValidPair(treastHistory.map((p): number | null => p.value));
+    const mbsHistory = toTrillions(mbsHist);
+    const [mbsLatest] = lastValidPair(mbsHistory.map((p): number | null => p.value));
+
+    // Net liquidity = WALCL − TGA − RRP, all in $T. RRPONTSYD is quoted in
+    // $ billions on FRED (the others are $ millions) - divide accordingly.
+    const rrpHistoryT = toHistory(rrpHist.map((p) => p.date), rrpHist.map((p) => (p.value === null ? null : p.value / 1000)));
+    const tgaHistoryT = toHistory(tgaHist.map((p) => p.date), tgaHist.map((p) => (p.value === null ? null : p.value / 1_000_000)));
+    const netLiqHistory = subtractHistory(subtractHistory(walclHistory, tgaHistoryT), rrpHistoryT);
+    const [netLiqLatest] = lastValidPair(netLiqHistory.map((p): number | null => p.value));
+    const netLiqStats = computeStats(netLiqHistory.map((p) => p.value));
+
     rows.push({
       id: "us-macro:h41-balance-sheet",
       panel_id: "us-macro",
@@ -119,7 +152,7 @@ export async function GET(req: NextRequest) {
       note: "Weekly, Fed H.4.1 release",
       value: fmt(walclLatest, { decimals: 3, suffix: "T" }),
       status: statusFromDelta(walclLatest, walclPrev),
-      source: "FRED WALCL",
+      source: "FRED WALCL/WRESBAL/WTREGEN/TREAST/WSHOMCB",
       zscore: walclSig.signal,
       sparkline: walclSig.sparkline,
       window_label: "10y weekly · momentum 13w",
@@ -134,6 +167,48 @@ export async function GET(req: NextRequest) {
           history: walcl13wHist,
           zscore: walcl13wStats.zscore,
           threshold: -5,
+          windowLabel: "10y weekly",
+        },
+        {
+          label: "Net liquidity (BS − TGA − RRP)",
+          value: netLiqLatest === null ? "-" : `$${netLiqLatest.toFixed(3)}T`,
+          caption: "Balance sheet minus the Treasury General Account and reverse repo - the liquidity actually available to markets rather than parked at the Fed or Treasury. Tracks risk assets tighter than WALCL alone.",
+          history: netLiqHistory,
+          zscore: netLiqStats.zscore,
+          windowLabel: "10y weekly",
+        },
+        {
+          label: "Reserve balances",
+          value: wresbalLatest === null ? "-" : `$${wresbalLatest.toFixed(3)}T`,
+          flag: wresbalLatest !== null && wresbalLatest < 2.8,
+          caption: "Bank reserves held at the Fed - the H.4.1 deposit line QT actually drains. The Fed's own 'lowest comfortable level' estimates sit near $2.5-3T; approaching it is what ended QT in 2019.",
+          history: wresbalHistory,
+          zscore: wresbalStats.zscore,
+          threshold: 2.8,
+          windowLabel: "10y weekly",
+        },
+        {
+          label: "Treasury General Account",
+          value: tgaLatestB === null ? "-" : `$${tgaLatestB.toFixed(0)}B`,
+          caption: "The Treasury's checking account at the Fed. A TGA rebuild (post debt-ceiling) pulls cash out of markets; a drawdown injects it - moves here offset or amplify QT week to week.",
+          history: tgaHistoryB,
+          zscore: tgaStats.zscore,
+          windowLabel: "10y weekly",
+        },
+        {
+          label: "UST held outright (table 5)",
+          value: treastLatest === null ? "-" : `$${treastLatest.toFixed(3)}T`,
+          caption: "Treasury securities on the Fed's balance sheet - the runoff (or reinvestment) side of QT policy.",
+          history: treastHistory,
+          zscore: null,
+          windowLabel: "10y weekly",
+        },
+        {
+          label: "MBS held outright (table 5)",
+          value: mbsLatest === null ? "-" : `$${mbsLatest.toFixed(3)}T`,
+          caption: "Agency mortgage-backed securities held outright - runs off passively and slowly; the stickiest part of the balance sheet.",
+          history: mbsHistory,
+          zscore: null,
           windowLabel: "10y weekly",
         },
       ],
@@ -227,6 +302,41 @@ export async function GET(req: NextRequest) {
           windowLabel: "3y daily",
         },
         { label: "Recovery assumption", value: "40% (HY convention)" },
+      ],
+    });
+
+    // ---- IG corporate credit spread ----
+    const igHist = await fetchFredHistory("BAMLC0A0CM", fredKey, 750);
+    const igNums = igHist.map((p) => p.value);
+    const [igLatest, igPrev] = lastValidPair(igNums);
+    const igHistoryPts = toHistory(igHist.map((p) => p.date), igNums);
+    const igSig = signalStats("us-macro:ig-credit-spread", igHistoryPts);
+    // HY − IG: the quality curve. Decompression (HY widening faster than IG)
+    // is the classic late-cycle credit tell - IG alone can stay calm through it.
+    const hyIgSpreadHist = subtractHistory(hyHistoryPts, igHistoryPts);
+    const [hyIgLatest] = lastValidPair(hyIgSpreadHist.map((p): number | null => p.value));
+    const hyIgStats = computeStats(hyIgSpreadHist.map((p) => p.value));
+    rows.push({
+      id: "us-macro:ig-credit-spread",
+      panel_id: "us-macro",
+      name: "IG Corporate Credit Spread",
+      note: "ICE BofA US Corporate (investment grade) OAS",
+      value: fmt(igLatest, { suffix: "%" }),
+      status: statusFromDelta(igLatest, igPrev),
+      history: igHistoryPts,
+      source: "FRED BAMLC0A0CM",
+      zscore: igSig.signal,
+      sparkline: igSig.sparkline,
+      window_label: "3y daily · anchor 1.3%",
+      extra_stats: [
+        {
+          label: "HY − IG decompression",
+          value: hyIgLatest === null ? "-" : `${hyIgLatest.toFixed(2)}pp`,
+          caption: "High yield spread minus IG spread. Widening of this gap (decompression) means stress is concentrating in the weakest credits first - the classic early warning that IG's calm is borrowed.",
+          history: hyIgSpreadHist,
+          zscore: hyIgStats.zscore,
+          windowLabel: "3y daily",
+        },
       ],
     });
 
@@ -496,8 +606,7 @@ export async function GET(req: NextRequest) {
       ],
     });
 
-    // ---- Reverse repo facility ----
-    const rrpHist = await fetchFredHistory("RRPONTSYD", fredKey, 750);
+    // ---- Reverse repo facility (rrpHist fetched with the H.4.1 batch above) ----
     const rrpNums = rrpHist.map((p) => p.value);
     const [rrpLatest, rrpPrev] = lastValidPair(rrpNums);
     const rrpHistoryPts = toHistory(rrpHist.map((p) => p.date), rrpNums);
@@ -876,30 +985,46 @@ export async function GET(req: NextRequest) {
 
     // ================= COT POSITIONING =================
     // Queried by CFTC contract code (names get renamed and silently break).
+    // Legacy non-commercials stay the headline series; the TFF (financials)
+    // and Disaggregated (commodities) reports add the trader-category split -
+    // leveraged funds / managed money is the fast money whose crowding
+    // actually unwinds, asset managers / producers are the other side.
 
-    const COT_MARKETS: { code: string; id: string; name: string; note: string }[] = [
-      { code: COT_CODES.ES, id: "cot:es", name: "S&P 500 (ES)", note: "Spec net position, e-mini" },
-      { code: COT_CODES.NQ, id: "cot:nq", name: "Nasdaq-100 (NQ)", note: "Spec net position, e-mini" },
-      { code: COT_CODES.UST_10Y, id: "cot:zn", name: "10y Treasury (ZN)", note: "Spec net position" },
-      { code: COT_CODES.UST_2Y, id: "cot:zt", name: "2y Treasury (ZT)", note: "Spec net position" },
-      { code: COT_CODES.GOLD, id: "cot:gold", name: "Gold (GC)", note: "Spec net position, COMEX" },
-      { code: COT_CODES.WTI, id: "cot:wti", name: "Crude Oil (CL)", note: "Spec net position, NYMEX WTI" },
-      { code: COT_CODES.COPPER, id: "cot:copper", name: "Copper (HG)", note: "Spec net position, COMEX" },
-      { code: COT_CODES.SILVER, id: "cot:silver", name: "Silver (SI)", note: "Spec net position, COMEX" },
-      { code: COT_CODES.NATGAS, id: "cot:natgas", name: "Natural Gas (NG)", note: "Spec net position, NYMEX Henry Hub" },
-      { code: COT_CODES.DXY, id: "cot:dxy", name: "Dollar Index (DX)", note: "Spec net position, ICE" },
-      { code: COT_CODES.VIX, id: "cot:vix", name: "VIX Futures", note: "Spec net position - structurally short" },
+    const COT_MARKETS: { code: string; id: string; name: string; note: string; klass: ContractClass }[] = [
+      { code: COT_CODES.ES, id: "cot:es", name: "S&P 500 (ES)", note: "Spec net position, e-mini", klass: "financial" },
+      { code: COT_CODES.NQ, id: "cot:nq", name: "Nasdaq-100 (NQ)", note: "Spec net position, e-mini", klass: "financial" },
+      { code: COT_CODES.UST_10Y, id: "cot:zn", name: "10y Treasury (ZN)", note: "Spec net position", klass: "financial" },
+      { code: COT_CODES.UST_2Y, id: "cot:zt", name: "2y Treasury (ZT)", note: "Spec net position", klass: "financial" },
+      { code: COT_CODES.GOLD, id: "cot:gold", name: "Gold (GC)", note: "Spec net position, COMEX", klass: "commodity" },
+      { code: COT_CODES.WTI, id: "cot:wti", name: "Crude Oil (CL)", note: "Spec net position, NYMEX WTI", klass: "commodity" },
+      { code: COT_CODES.COPPER, id: "cot:copper", name: "Copper (HG)", note: "Spec net position, COMEX", klass: "commodity" },
+      { code: COT_CODES.SILVER, id: "cot:silver", name: "Silver (SI)", note: "Spec net position, COMEX", klass: "commodity" },
+      { code: COT_CODES.NATGAS, id: "cot:natgas", name: "Natural Gas (NG)", note: "Spec net position, NYMEX Henry Hub", klass: "commodity" },
+      { code: COT_CODES.DXY, id: "cot:dxy", name: "Dollar Index (DX)", note: "Spec net position, ICE", klass: "financial" },
+      { code: COT_CODES.VIX, id: "cot:vix", name: "VIX Futures", note: "Spec net position - structurally short", klass: "financial" },
     ];
 
-    const cotSeriesByCode = new Map<string, CotPoint[]>(
-      await Promise.all(
-        COT_MARKETS.map(async (m) => [m.code, await fetchCotSeries(m.code, 156)] as [string, CotPoint[]])
-      )
-    );
+    const [cotSeriesEntries, cotCategoryEntries] = await Promise.all([
+      Promise.all(COT_MARKETS.map(async (m) => [m.code, await fetchCotSeries(m.code, 156)] as [string, CotPoint[]])),
+      Promise.all(COT_MARKETS.map(async (m) => [m.code, await fetchCotCategories(m.code, m.klass, 156)] as [string, CotCategories])),
+    ]);
+    const cotSeriesByCode = new Map<string, CotPoint[]>(cotSeriesEntries);
+    const cotCategoriesByCode = new Map<string, CotCategories>(cotCategoryEntries);
+
+    /** Rolling COT-index history so the stat chart shows the range position through time, not one number. */
+    const cotIndexHistory = (series: CotPoint[], window: number): HistPoint[] => {
+      const out: HistPoint[] = [];
+      for (let i = 20; i < series.length; i++) {
+        const v = cotIndex(series.slice(0, i + 1), window);
+        if (v !== null) out.push({ date: series[i].date, value: v });
+      }
+      return out;
+    };
 
     const cotRow = (m: { code: string; id: string; name: string; note: string }, panel_id: string): UpsertRow | null => {
       const series = cotSeriesByCode.get(m.code) ?? [];
       if (series.length < 20) return null;
+      const cats = cotCategoriesByCode.get(m.code);
       const netHist: HistPoint[] = series.map((p) => ({ date: p.date, value: p.net }));
       const pctHist: HistPoint[] = series
         .filter((p) => p.netPctOi !== null)
@@ -907,13 +1032,72 @@ export async function GET(req: NextRequest) {
       const sig = signalStats(m.id, netHist);
       const latest = series[series.length - 1];
       const prev = series[series.length - 2];
-      const idx = cotIndex(series);
-      const idxHist: HistPoint[] = [];
-      for (let i = 20; i < series.length; i++) {
-        const v = cotIndex(series.slice(0, i + 1));
-        if (v !== null) idxHist.push({ date: series[i].date, value: v });
-      }
+      // 156 weekly reports = the standard 36-month COT index; 26 = the 6-month
+      // read that catches positioning turns the long window smooths over.
+      const idx36 = cotIndex(series, 156);
+      const idx6 = cotIndex(series, 26);
       const pctStats = computeStats(pctHist.map((p) => p.value));
+
+      const extra_stats: ExtraStat[] = [
+        {
+          label: "COT index (36M)",
+          value: idx36 === null ? "-" : `${idx36.toFixed(0)} / 100`,
+          flag: idx36 !== null && (idx36 <= 10 || idx36 >= 90),
+          caption: "Where today's net position sits in its 36-month range. 0 = most short, 100 = most long - readings past 90/10 mark crowded trades that unwind violently.",
+          history: cotIndexHistory(series, 156),
+          zscore: null,
+          threshold: 90,
+          windowLabel: "36M weekly",
+        },
+        {
+          label: "COT index (6M)",
+          value: idx6 === null ? "-" : `${idx6.toFixed(0)} / 100`,
+          flag: idx6 !== null && (idx6 <= 10 || idx6 >= 90),
+          caption: "Same range position over the trailing 6 months - the faster read that flags positioning turns the 36M window is still averaging away.",
+          history: cotIndexHistory(series, 26),
+          zscore: null,
+          threshold: 90,
+          windowLabel: "6M weekly",
+        },
+        {
+          label: "Net as % of open interest",
+          value: latest.netPctOi === null ? "-" : `${latest.netPctOi > 0 ? "+" : ""}${latest.netPctOi.toFixed(1)}%`,
+          caption: "Normalizes the position by market size - the only way raw contract counts are comparable across years and contracts.",
+          history: pctHist,
+          zscore: pctStats.zscore,
+          windowLabel: "3y weekly",
+        },
+      ];
+
+      if (cats && cats.fastMoney.length >= 20) {
+        const fmLatest = cats.fastMoney[cats.fastMoney.length - 1];
+        const fmIdx36 = cotIndex(cats.fastMoney, 156);
+        const fmPctStats = computeStats(cats.fastMoney.map((p) => p.netPctOi));
+        extra_stats.push({
+          label: `${cats.fastMoneyLabel} net`,
+          value: `${fmtNet(fmLatest.net)}${fmLatest.netPctOi === null ? "" : ` (${fmLatest.netPctOi > 0 ? "+" : ""}${fmLatest.netPctOi.toFixed(1)}% OI)`}`,
+          flag: fmIdx36 !== null && (fmIdx36 <= 10 || fmIdx36 >= 90),
+          caption: `${cats.fastMoneyLabel} from the ${cats.fastMoneyLabel === "Leveraged funds" ? "TFF" : "disaggregated"} report - hedge funds and CTAs, the fast money whose crowding actually mean-reverts. 36M COT index: ${fmIdx36 === null ? "n/a" : fmIdx36.toFixed(0) + "/100"}.`,
+          history: cats.fastMoney.map((p) => ({ date: p.date, value: p.net })),
+          zscore: fmPctStats.zscore,
+          windowLabel: "3y weekly",
+        });
+      }
+      if (cats && cats.institutional.length >= 20) {
+        const instLatest = cats.institutional[cats.institutional.length - 1];
+        const instPctStats = computeStats(cats.institutional.map((p) => p.netPctOi));
+        extra_stats.push({
+          label: `${cats.institutionalLabel} net`,
+          value: `${fmtNet(instLatest.net)}${instLatest.netPctOi === null ? "" : ` (${instLatest.netPctOi > 0 ? "+" : ""}${instLatest.netPctOi.toFixed(1)}% OI)`}`,
+          caption: cats.institutionalLabel === "Asset managers"
+            ? "Unlevered institutional money (pensions, insurers, mutual funds) - slower-moving allocation flows, the other side of the leveraged-fund trade."
+            : "Commercial hedgers with the physical exposure - historically the informed side; extremes here lean against the managed-money crowd.",
+          history: cats.institutional.map((p) => ({ date: p.date, value: p.net })),
+          zscore: instPctStats.zscore,
+          windowLabel: "3y weekly",
+        });
+      }
+
       return {
         id: m.id,
         panel_id,
@@ -926,26 +1110,7 @@ export async function GET(req: NextRequest) {
         sparkline: sig.sparkline,
         window_label: "3y weekly · positioning 2y",
         history: netHist,
-        extra_stats: [
-          {
-            label: "COT index (3y)",
-            value: idx === null ? "-" : `${idx.toFixed(0)} / 100`,
-            flag: idx !== null && (idx <= 10 || idx >= 90),
-            caption: "Where today's net position sits in its 3-year range. 0 = most short, 100 = most long - readings past 90/10 mark crowded trades that unwind violently.",
-            history: idxHist,
-            zscore: null,
-            threshold: 90,
-            windowLabel: "3y weekly",
-          },
-          {
-            label: "Net as % of open interest",
-            value: latest.netPctOi === null ? "-" : `${latest.netPctOi > 0 ? "+" : ""}${latest.netPctOi.toFixed(1)}%`,
-            caption: "Normalizes the position by market size - the only way raw contract counts are comparable across years and contracts.",
-            history: pctHist,
-            zscore: pctStats.zscore,
-            windowLabel: "3y weekly",
-          },
-        ],
+        extra_stats,
       };
     };
 

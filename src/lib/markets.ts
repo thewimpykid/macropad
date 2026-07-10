@@ -54,6 +54,11 @@ export const IMPACTS: Record<string, Impact[]> = {
     { symbol: "^GSPC", sign: -1, weight: 0.8, rationale: "Credit stress front-runs equity drawdowns; spreads widen before indices crack." },
     { symbol: "TLT", sign: 1, weight: 0.4, rationale: "Credit stress drives flight-to-quality into Treasuries." },
   ],
+  "us-macro:ig-credit-spread": [
+    { symbol: "HYG", sign: -1, weight: 0.6, rationale: "IG widening drags the whole credit complex - HY never rallies through systemic IG stress." },
+    { symbol: "^GSPC", sign: -1, weight: 0.6, rationale: "IG spreads price systemic corporate stress - when they move, equity multiples follow." },
+    { symbol: "TLT", sign: 1, weight: 0.4, rationale: "IG stress drives flight-to-quality into Treasuries." },
+  ],
   "us-macro:cpi-yoy": [
     { symbol: "TLT", sign: -1, weight: 0.9, rationale: "Hot inflation pushes out cuts and lifts yields - direct duration loss." },
     { symbol: "DX-Y.NYB", sign: 1, weight: 0.5, rationale: "Hot CPI = hawkish Fed = rate support for the dollar." },

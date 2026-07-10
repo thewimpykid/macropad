@@ -31,6 +31,13 @@ const CONFIG: Record<string, BiasConfig> = {
     low: { label: "Spreads compressed - risk-on, easy credit", tone: "up" },
     neutral: "Credit spreads near their regime average - no stress signal.",
   },
+  "us-macro:ig-credit-spread": {
+    context:
+      "Investment grade spreads price default risk in the highest-quality corporate credit. They move less than high yield but when IG widens the stress is systemic, not idiosyncratic - and the HY−IG decompression gap shows whether stress is still contained to the weakest credits.",
+    high: { label: "IG spreads widening - systemic credit stress", tone: "down" },
+    low: { label: "IG spreads tight - credit fully risk-on", tone: "up" },
+    neutral: "IG spreads near their normal range - no systemic signal.",
+  },
   "us-macro:cpi-yoy": {
     context:
       "Headline CPI YoY is the single number that moves the Fed reaction function most. Hot prints push out cut expectations and pressure duration; cooling prints open the door to easing and support risk assets, especially rate-sensitive sectors.",

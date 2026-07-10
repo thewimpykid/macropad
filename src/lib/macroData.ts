@@ -88,6 +88,7 @@ export const macroPanels: MacroPanel[] = [
       blank("us-macro:h41-balance-sheet", "H.4.1 Fed Balance Sheet", "Weekly, Fed H.4.1 release", "FRED WALCL"),
       blank("us-macro:sofr-effr-iorb", "SOFR / EFFR / IORB", "Funding rate spread stack", "FRED SOFR/EFFR/IORB"),
       blank("us-macro:hy-credit-spread", "High Yield Credit Spread", "ICE BofA HY OAS", "FRED BAMLH0A0HYM2"),
+      blank("us-macro:ig-credit-spread", "IG Corporate Credit Spread", "ICE BofA US Corporate (investment grade) OAS", "FRED BAMLC0A0CM"),
       blank("us-macro:cpi-yoy", "CPI Inflation (YoY)", "Headline CPI, year-over-year", "FRED CPIAUCSL"),
       blank("us-macro:core-cpi", "Core CPI (YoY)", "Ex food & energy - the sticky part", "FRED CPILFESL"),
       blank("us-macro:core-pce", "Core PCE (YoY)", "The Fed's actual target metric", "FRED PCEPILFE"),
@@ -124,7 +125,7 @@ export const macroPanels: MacroPanel[] = [
     id: "cot-positioning",
     title: "COT Positioning",
     description:
-      "Non-commercial (spec) net positioning per market - with COT index and net-as-%-of-open-interest, the two normalizations that make raw contract counts readable.",
+      "Net positioning per market across trader categories - large specs plus leveraged funds / managed money and the institutional side, with 36M and 6M COT indexes and net-as-%-of-open-interest.",
     series: [
       blank("cot:es", "S&P 500 (ES)", "Spec net position, e-mini", "CFTC Legacy COT 13874A"),
       blank("cot:nq", "Nasdaq-100 (NQ)", "Spec net position, e-mini", "CFTC Legacy COT 209742"),
