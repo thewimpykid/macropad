@@ -418,7 +418,7 @@ export default function TerminalPage({ panels, markets }: { panels: MacroPanel[]
         ],
         [{ t: hit.note, c: "var(--text-faint)" }],
         ...(bias ? [[{ t: bias.label, c: biasColor }] as Token[]] : []),
-        [{ t: `source: ${hit.source}${hit.windowLabel ? `  ·  ${hit.windowLabel}` : ""}`, c: "var(--text-faint)" }],
+        ...(hit.windowLabel ? [[{ t: hit.windowLabel, c: "var(--text-faint)" }] as Token[]] : []),
       ];
 
       const impacts = IMPACTS[hit.id] ?? [];
