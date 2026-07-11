@@ -241,7 +241,7 @@ export default function NewsGlobe({ headlines }: { headlines: NewsHeadlinePayloa
               </span>
               <p className="m-0 font-sans text-[0.82rem] leading-snug text-[var(--text)]">{active.headline.title}</p>
               <div className="mt-2 font-mono text-[0.66rem] text-[var(--text-faint)]">
-                {active.geo.place} · {active.headline.source} ·{" "}
+                {active.geo.place} ·{" "}
                 {new Date(active.headline.pubDate).toLocaleString("en-US", {
                   month: "short",
                   day: "numeric",

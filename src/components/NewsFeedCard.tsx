@@ -128,7 +128,7 @@ export default function NewsFeedCard({ series }: { series: MacroSeries }) {
                           <p className="m-0 mt-0.5 font-sans text-[0.74rem] leading-snug text-[var(--text-dim)]">{h.description}</p>
                         )}
                         <div className="mt-0.5 font-mono text-[0.64rem] text-[var(--text-faint)]">
-                          {h.source} · {fmtDateTime(h.pubDate)}
+                          {fmtDateTime(h.pubDate)}
                         </div>
                       </div>
                     </div>

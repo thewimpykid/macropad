@@ -9,9 +9,6 @@ import NewsFeedCard from "@/components/NewsFeedCard";
 import MarketTicker from "@/components/MarketTicker";
 import IndicatorTicker from "@/components/IndicatorTicker";
 import PanelIcon from "@/components/PanelIcon";
-import MacroBiasPage from "@/components/MacroBiasPage";
-import ReplayPage from "@/components/ReplayPage";
-import RegimeFingerprintPage from "@/components/RegimeFingerprintPage";
 import CalendarPage from "@/components/CalendarPage";
 import BoardPage from "@/components/BoardPage";
 import DocumentationPage from "@/components/DocumentationPage";
@@ -214,8 +211,19 @@ export default function DashboardShell({
   // their own persisted order so a reorder never mixes the two families.
   // Tabs are draggable at all times - drag one over a sibling and the list
   // reorders live; the result persists on drop.
+  // Macro Bias, Replay, and Regime Fingerprint are locked for the beta - they
+  // run their scoring in the browser, which would ship the whole bias
+  // methodology in the JS bundle. They render as disabled nav items until the
+  // computation is moved server-side. Calendar is the only always-on analysis
+  // tab, so group B is just Calendar now.
   const defaultGroupA = [NEWS_ID, ...visiblePanels.map((p) => p.id)];
-  const defaultGroupB = [MACRO_BIAS_ID, REPLAY_ID, FINGERPRINT_ID, CALENDAR_ID];
+  const defaultGroupB = [CALENDAR_ID];
+  const LOCKED_TABS = [
+    { id: MACRO_BIAS_ID, label: "MACRO BIAS" },
+    { id: REPLAY_ID, label: "REPLAY" },
+    { id: FINGERPRINT_ID, label: "FINGERPRINT" },
+    { id: "options-flow", label: "OPTIONS FLOW" },
+  ];
   const [navOrder, setNavOrder] = useState<NavOrderState>({ a: defaultGroupA, b: defaultGroupB });
   const [draggingTab, setDraggingTab] = useState<{ group: "a" | "b"; id: string } | null>(null);
 
@@ -251,9 +259,6 @@ export default function DashboardShell({
   }
   const isBoard = activeId === BOARD_ID;
   const isNews = activeId === NEWS_ID;
-  const isMacroBias = activeId === MACRO_BIAS_ID;
-  const isReplay = activeId === REPLAY_ID;
-  const isFingerprint = activeId === FINGERPRINT_ID;
   const isCalendar = activeId === CALENDAR_ID;
   const isDocs = activeId === DOCS_ID;
   const allSeries = panels.flatMap((p) => p.series);
@@ -298,12 +303,6 @@ export default function DashboardShell({
   }
   function resolveGroupBEntry(id: string): NavEntryMeta | null {
     switch (id) {
-      case MACRO_BIAS_ID:
-        return { id, iconId: "macro-bias", label: "MACRO BIAS", onClick: () => pickPage(MACRO_BIAS_ID) };
-      case REPLAY_ID:
-        return { id, iconId: "replay", label: "REPLAY", onClick: () => pickPage(REPLAY_ID) };
-      case FINGERPRINT_ID:
-        return { id, iconId: "fingerprint", label: "FINGERPRINT", onClick: () => pickPage(FINGERPRINT_ID) };
       case CALENDAR_ID:
         return { id, iconId: "calendar", label: "CALENDAR", onClick: () => pickPage(CALENDAR_ID) };
       default:
@@ -317,17 +316,11 @@ export default function DashboardShell({
     ? "Board"
     : isNews
       ? "News"
-      : isMacroBias
-        ? "Macro Bias"
-        : isReplay
-          ? "Replay"
-          : isFingerprint
-            ? "Regime Fingerprint"
-            : isCalendar
-            ? "Calendar"
-            : isDocs
-            ? "Documentation"
-            : active?.title ?? "";
+      : isCalendar
+        ? "Calendar"
+        : isDocs
+          ? "Documentation"
+          : active?.title ?? "";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -409,7 +402,9 @@ export default function DashboardShell({
               />
             ))}
 
-            <LockedNavItem index={nextIndex()} id="options-flow" label="OPTIONS FLOW" />
+            {LOCKED_TABS.map((t) => (
+              <LockedNavItem key={t.id} index={nextIndex()} id={t.id} label={t.label} />
+            ))}
 
             <div className="mx-4 my-2 border-t border-[var(--border)]" />
 
@@ -489,36 +484,6 @@ export default function DashboardShell({
               ) : (
                 <p className="font-sans text-[0.85rem] text-[var(--text-faint)]">No news data yet.</p>
               )}
-            </>
-          ) : isMacroBias ? (
-            <>
-              <header className="mb-8">
-                <div className="eyebrow mb-2">Composite regime read</div>
-                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
-                  <Scramble text="Macro Bias" />
-                </h1>
-              </header>
-              <MacroBiasPage panels={panels} />
-            </>
-          ) : isReplay ? (
-            <>
-              <header className="mb-8">
-                <div className="eyebrow mb-2">Point-in-time scrub</div>
-                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
-                  <Scramble text="Replay" />
-                </h1>
-              </header>
-              <ReplayPage panels={panels} />
-            </>
-          ) : isFingerprint ? (
-            <>
-              <header className="mb-8">
-                <div className="eyebrow mb-2">Seven-pillar shape, then vs now</div>
-                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
-                  <Scramble text="Regime Fingerprint" />
-                </h1>
-              </header>
-              <RegimeFingerprintPage panels={panels} markets={markets} />
             </>
           ) : isCalendar ? (
             <>
