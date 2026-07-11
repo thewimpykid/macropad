@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ACCENT_PRESETS, applyThemePrefs, loadThemePrefs, saveThemePrefs, type AccentPreset, type ThemeMode, type MotionPref } from "@/lib/theme";
 import { SegmentedControl } from "@/components/BiasView";
 
@@ -44,7 +45,10 @@ export default function SettingsPanel() {
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const insideButton = ref.current?.contains(target);
+      const insidePopover = popRef.current?.contains(target);
+      if (!insideButton && !insidePopover) setOpen(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -108,71 +112,79 @@ export default function SettingsPanel() {
         <GearIcon />
       </button>
 
-      {open && (
-        <div
-          ref={popRef}
-          className="z-50 w-60 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--panel-2)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
-          style={{
-            position: "fixed",
-            left: pos?.left ?? -9999,
-            top: pos?.top,
-            bottom: pos?.top === undefined ? pos?.bottom ?? 0 : undefined,
-            maxHeight: pos?.maxHeight,
-            visibility: pos ? "visible" : "hidden",
-          }}
-        >
-          <div className="mb-3">
-            <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Theme</div>
-            <SegmentedControl
-              options={[
-                { id: "dark" as const, label: "Dark" },
-                { id: "light" as const, label: "Light" },
-              ]}
-              value={theme}
-              onChange={updateTheme}
-              grow
-            />
-          </div>
-
-          <div className="mb-3">
-            <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Background</div>
-            <SegmentedControl
-              options={[
-                { id: "on" as const, label: "Moving" },
-                { id: "off" as const, label: "Still" },
-              ]}
-              value={motion}
-              onChange={updateMotion}
-              grow
-            />
-          </div>
-
-          <div className="mb-3">
-            <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Accent</div>
-            <div className="flex flex-wrap gap-1.5">
-              {ACCENT_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => updateAccent(p.id)}
-                  aria-label={p.label}
-                  title={p.label}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border transition-transform"
-                  style={{
-                    borderColor: accent === p.id ? "var(--text)" : "var(--border)",
-                    transform: accent === p.id ? "scale(1.08)" : undefined,
-                  }}
-                >
-                  <span className="h-3.5 w-3.5 rounded-full border border-[var(--border)]" style={{ background: p.swatch }} />
-                </button>
-              ))}
+      {open &&
+        createPortal(
+          // Portaled to <body>: the sidebar <aside> has its own transform
+          // (mobile slide-in) and overflow-y-auto, and a `transform` on any
+          // ancestor turns `position: fixed` into "fixed relative to that
+          // ancestor" instead of the viewport - so this was actually being
+          // clipped by the sidebar's own scroll box the whole time, no
+          // matter how its height/position math was tuned.
+          <div
+            ref={popRef}
+            className="z-50 w-60 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--panel-2)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
+            style={{
+              position: "fixed",
+              left: pos?.left ?? -9999,
+              top: pos?.top,
+              bottom: pos?.top === undefined ? pos?.bottom ?? 0 : undefined,
+              maxHeight: pos?.maxHeight,
+              visibility: pos ? "visible" : "hidden",
+            }}
+          >
+            <div className="mb-3">
+              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Theme</div>
+              <SegmentedControl
+                options={[
+                  { id: "dark" as const, label: "Dark" },
+                  { id: "light" as const, label: "Light" },
+                ]}
+                value={theme}
+                onChange={updateTheme}
+                grow
+              />
             </div>
-          </div>
 
-          <p className="m-0 font-sans text-[0.62rem] leading-snug text-[var(--text-faint)]">
-            Tip: drag a tab by the grip on its right edge to reorder. Board and Docs stay pinned.
-          </p>
-        </div>
-      )}
+            <div className="mb-3">
+              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Background</div>
+              <SegmentedControl
+                options={[
+                  { id: "on" as const, label: "Moving" },
+                  { id: "off" as const, label: "Still" },
+                ]}
+                value={motion}
+                onChange={updateMotion}
+                grow
+              />
+            </div>
+
+            <div className="mb-3">
+              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Accent</div>
+              <div className="flex flex-wrap gap-1.5">
+                {ACCENT_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => updateAccent(p.id)}
+                    aria-label={p.label}
+                    title={p.label}
+                    className="flex h-6 w-6 items-center justify-center rounded-full border transition-transform"
+                    style={{
+                      borderColor: accent === p.id ? "var(--text)" : "var(--border)",
+                      transform: accent === p.id ? "scale(1.08)" : undefined,
+                    }}
+                  >
+                    <span className="h-3.5 w-3.5 rounded-full border border-[var(--border)]" style={{ background: p.swatch }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="m-0 font-sans text-[0.62rem] leading-snug text-[var(--text-faint)]">
+              Tip: drag a tab by the grip on its right edge to reorder. Board and Docs stay pinned.
+            </p>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
