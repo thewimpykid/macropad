@@ -93,6 +93,13 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M14 13.5V17" />
     </>
   ),
+  terminal: (
+    <>
+      <rect x="2.5" y="3.5" width="15" height="13" rx="1.5" />
+      <path d="M5.5 7.5L8.5 10L5.5 12.5" />
+      <path d="M10.5 12.5H14.5" />
+    </>
+  ),
   docs: (
     <>
       <path d="M5 3H12.5L16 6.5V17H5Z" />

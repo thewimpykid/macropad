@@ -14,6 +14,7 @@ import ReplayPage from "@/components/ReplayPage";
 import RegimeFingerprintPage from "@/components/RegimeFingerprintPage";
 import CalendarPage from "@/components/CalendarPage";
 import BoardPage from "@/components/BoardPage";
+import TerminalPage from "@/components/TerminalPage";
 import DocumentationPage from "@/components/DocumentationPage";
 import { MARKET_SYMBOLS } from "@/lib/markets";
 import { getSignTone } from "@/lib/bias";
@@ -27,6 +28,7 @@ const DEEP_PANELS = new Set(["us-macro", "yield-rates", "cot-positioning", "tran
 /** Catalogue-only panels - carry data (e.g. per-asset news) but never show up as their own nav entry. */
 const HIDDEN_PANELS = new Set(["asset-news", "calendar"]);
 const BOARD_ID = "board";
+const TERMINAL_ID = "terminal";
 const NEWS_ID = "news";
 const MACRO_BIAS_ID = "macro-bias";
 const REPLAY_ID = "replay";
@@ -280,6 +282,7 @@ export default function DashboardShell({
     };
   }
   const isBoard = activeId === BOARD_ID;
+  const isTerminal = activeId === TERMINAL_ID;
   const isNews = activeId === NEWS_ID;
   const isMacroBias = activeId === MACRO_BIAS_ID;
   const isReplay = activeId === REPLAY_ID;
@@ -348,7 +351,9 @@ export default function DashboardShell({
 
   const pageTitle = isBoard
     ? "Board"
-    : isNews
+    : isTerminal
+      ? "Terminal"
+      : isNews
       ? "News"
       : isMacroBias
         ? "Macro Bias"
@@ -413,6 +418,7 @@ export default function DashboardShell({
 
           <nav className="flex flex-1 flex-col py-3">
             <NavItem index={nextIndex()} id="board" label="BOARD" isActive={isBoard} onClick={() => pickPage(BOARD_ID)} />
+            <NavItem index={nextIndex()} id="terminal" label="TERMINAL" isActive={isTerminal} onClick={() => pickPage(TERMINAL_ID)} />
 
             <div className="mx-4 my-2 border-t border-[var(--border)]" />
 
@@ -506,6 +512,16 @@ export default function DashboardShell({
                 </div>
               </header>
               <BoardPage panels={visiblePanels} newsSeries={boardNewsSeries} />
+            </>
+          ) : isTerminal ? (
+            <>
+              <header className="mb-6">
+                <div className="eyebrow mb-2">Every surface, one command line</div>
+                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
+                  <Scramble text="Terminal" />
+                </h1>
+              </header>
+              <TerminalPage panels={panels} markets={markets} />
             </>
           ) : isNews ? (
             <>
