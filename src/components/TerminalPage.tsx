@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MacroPanel, MacroSeries } from "@/lib/macroData";
 import type { MarketRow } from "@/lib/getMarkets";
-import { getSignTone } from "@/lib/bias";
+import { getSignTone, getBias } from "@/lib/bias";
 import { computeMacroBias, TIMEFRAMES, ASSET_SCOPES, DEFAULT_TIMEFRAME, DEFAULT_ASSET_SCOPE, type PillarResult } from "@/lib/macroBias";
 import { findSimilarRegimes, buildDateReport, type SimilarRegime, type ReportLine } from "@/lib/regimeFingerprint";
 import { getCalendarEvents } from "@/lib/econCalendar";
 import { INDICATOR_DOCS } from "@/lib/indicatorDocs";
-import { MARKET_SYMBOLS } from "@/lib/markets";
+import { MARKET_SYMBOLS, IMPACTS, marketRowId } from "@/lib/markets";
+import { changeCorrelation } from "@/lib/stats";
 
 /*
  * Command-line entry point into every page the desk has: Board (every
@@ -19,7 +20,8 @@ import { MARKET_SYMBOLS } from "@/lib/markets";
  */
 
 type Token = { t: string; c?: string };
-type Line = { id: number; tokens: Token[] };
+type LineContent = Token[] | { node: React.ReactNode };
+type Line = { id: number; content: LineContent };
 
 interface FlatIndicator {
   id: string;
@@ -62,17 +64,17 @@ const SCOPE_ALIASES: Record<string, string> = {
 const VERB_ALIASES: Record<string, string> = {
   macro: "bias", overview: "bias", regimescore: "bias",
   board: "scan", overall: "scan", everything: "scan", all: "scan",
-  lookup: "read", find: "read", search: "read",
+  lookup: "read", find: "read", search: "read", get: "read",
+  chart: "read", plot: "read", trend: "read", history: "read", graph: "read", stats: "read",
   cluster: "regime", similar: "regime", fingerprint: "regime", match: "regime", matches: "regime",
   cal: "calendar", releases: "calendar", schedule: "calendar",
   explain: "docs", about: "docs", doc: "docs", info: "docs", learn: "docs",
-  chart: "graph", plot: "graph", trend: "graph", history: "graph",
   reset: "clear", cls: "clear",
   "?": "help", commands: "help",
 };
 
 const KNOWN_VERBS = [
-  "scan", "read", "graph", "stats", "movers",
+  "scan", "read", "movers",
   "bias", "pillars", "replay",
   "regime", "footprint",
   "news", "calendar", "docs",
@@ -87,13 +89,30 @@ function resolveArg(args: string[], validIds: string[], aliases: Record<string, 
   return null;
 }
 
-/** Compact 8-level block sparkline, scaled min→max over the given values. */
-function asciiSparkline(values: number[]): string {
-  const blocks = "▁▂▃▄▅▆▇█";
+/** Real line chart straight off an indicator's own history/sparkline values — no ascii. */
+function LineChart({ values, tone }: { values: number[]; tone: "up" | "down" | "flat" }) {
+  const w = 460;
+  const h = 96;
+  const padX = 6;
+  const padY = 10;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
-  return values.map((v) => blocks[Math.min(7, Math.floor(((v - min) / span) * 8))]).join("");
+  const stepX = (w - padX * 2) / (values.length - 1);
+  const x = (i: number) => padX + i * stepX;
+  const y = (v: number) => h - padY - ((v - min) / span) * (h - padY * 2);
+  const pts = values.map((v, i) => `${x(i)},${y(v)}`);
+  const color = tone === "up" ? "var(--up)" : tone === "down" ? "var(--down)" : "var(--text-faint)";
+  const areaPts = `${x(0)},${h - padY} ${pts.join(" ")} ${x(values.length - 1)},${h - padY}`;
+  const lastX = x(values.length - 1);
+  const lastY = y(values[values.length - 1]);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="block w-full" style={{ height: `${h}px` }} preserveAspectRatio="none">
+      <polygon points={areaPts} fill={color} opacity={0.12} />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+      <circle cx={lastX} cy={lastY} r={3} fill={color} />
+    </svg>
+  );
 }
 
 const toneColor = (tone: "up" | "down" | "flat") =>
@@ -133,7 +152,61 @@ function wrap(text: string, width: number): string[] {
   return out;
 }
 
-const SUGGESTIONS = ["bias", "bias this month stocks", "news", "calendar", "docs cpi", "graph vix", "help"];
+const SUGGESTIONS = ["scan", "bias", "bias this month stocks", "movers", "news", "calendar", "regime", "docs cpi", "read cpi", "help"];
+
+/*
+ * Always-on command reference, independent of what's typed. A first-time
+ * user should never have to guess or memorize syntax — this is the full
+ * menu of everything the terminal can do, one click away, grouped by the
+ * page it pulls from. Zero-arg entries run immediately on click; entries
+ * that need a specific name/date just fill the input so the user can edit
+ * before hitting enter.
+ */
+interface MenuItem { cmd: string; desc: string; fill?: boolean }
+interface MenuGroup { title: string; items: MenuItem[] }
+const COMMAND_MENU: MenuGroup[] = [
+  {
+    title: "Board",
+    items: [
+      { cmd: "scan", desc: "every indicator, every category" },
+      { cmd: "scan macro", desc: "just one category", fill: true },
+      { cmd: "read cpi", desc: "full card: value, score, chart, every stat", fill: true },
+      { cmd: "movers", desc: "strongest signals right now" },
+    ],
+  },
+  {
+    title: "Macro Bias / Replay",
+    items: [
+      { cmd: "bias", desc: "composite bias, 1 week lookback" },
+      { cmd: "bias month stocks", desc: "e.g. month lookback, equities scope", fill: true },
+      { cmd: "pillars", desc: "pillar scores only, no indicator rows" },
+      { cmd: "replay 2024-01-05", desc: "bias as of any past date", fill: true },
+    ],
+  },
+  {
+    title: "Regime Fingerprint",
+    items: [
+      { cmd: "regime", desc: "nearest historical regime matches" },
+      { cmd: "footprint 1", desc: "daily returns for match #1 (run regime first)", fill: true },
+    ],
+  },
+  {
+    title: "News / Calendar / Docs",
+    items: [
+      { cmd: "news", desc: "general macro news feed" },
+      { cmd: "news spx", desc: "news for one asset", fill: true },
+      { cmd: "calendar", desc: "release calendar, next 30 days" },
+      { cmd: "docs cpi", desc: "full write-up for any indicator", fill: true },
+    ],
+  },
+  {
+    title: "",
+    items: [
+      { cmd: "help", desc: "list every command, right here in the log" },
+      { cmd: "clear", desc: "wipe the screen" },
+    ],
+  },
+];
 
 function flattenIndicators(panels: MacroPanel[]): FlatIndicator[] {
   const out: FlatIndicator[] = [];
@@ -181,45 +254,41 @@ export default function TerminalPage({ panels, markets }: { panels: MacroPanel[]
     const rawFirst = words[0].toLowerCase();
 
     if (words.length === 1 && !endsWithSpace) {
-      return KNOWN_VERBS.filter((v) => v.startsWith(rawFirst)).slice(0, 6);
+      return KNOWN_VERBS.filter((v) => v.startsWith(rawFirst));
     }
 
     const verb = VERB_ALIASES[rawFirst] ?? rawFirst;
     const argQuery = words.slice(1).join(" ").toLowerCase();
 
-    if (verb === "read" || verb === "stats" || verb === "graph" || verb === "docs") {
+    if (verb === "read" || verb === "docs") {
       const pool = verb === "docs" ? allSeries.filter((s) => INDICATOR_DOCS[s.id]) : allSeries;
       return pool
         .filter((s) => s.name.toLowerCase().includes(argQuery))
-        .slice(0, 6)
         .map((s) => `${rawFirst} ${s.name}`);
     }
     if (verb === "scan") {
       return categories
         .filter((c) => c.toLowerCase().includes(argQuery))
-        .slice(0, 6)
         .map((c) => `scan ${c.toLowerCase()}`);
     }
     if (verb === "news") {
       return MARKET_SYMBOLS.filter(
         (m) => m.label.toLowerCase().includes(argQuery) || m.symbol.toLowerCase().includes(argQuery)
-      )
-        .slice(0, 6)
-        .map((m) => `news ${m.symbol}`);
+      ).map((m) => `news ${m.symbol}`);
     }
     if (verb === "bias" || verb === "pillars" || verb === "replay") {
       const lastWord = words[words.length - 1]?.toLowerCase() ?? "";
       if (endsWithSpace || lastWord.length === 0) return [];
       const wordPool = [...Object.keys(TF_ALIASES), ...TIMEFRAME_IDS, ...Object.keys(SCOPE_ALIASES), ...SCOPE_IDS];
-      const matches = wordPool.filter((w) => w.startsWith(lastWord) && w !== lastWord).slice(0, 6);
+      const matches = wordPool.filter((w) => w.startsWith(lastWord) && w !== lastWord);
       return matches.map((w) => [...words.slice(0, -1), w].join(" "));
     }
     return [];
   }, [input, isEmptyInput, allSeries, categories]);
 
   const nextId = () => ++idRef.current;
-  const emit = (batch: Token[][]) =>
-    setLines((prev) => [...prev, ...batch.map((tokens) => ({ id: nextId(), tokens }))]);
+  const emit = (batch: LineContent[]) =>
+    setLines((prev) => [...prev, ...batch.map((content) => ({ id: nextId(), content }))]);
 
   function indicatorLine(ind: FlatIndicator): Token[] {
     return [
@@ -261,9 +330,7 @@ export default function TerminalPage({ panels, markets }: { panels: MacroPanel[]
       emit([
         [{ t: "board", c: "var(--text-faint)" }],
         [{ t: "  scan [category]", c: "var(--text)" }, { t: "        every indicator, or one category", c: "var(--text-faint)" }],
-        [{ t: "  read <name>", c: "var(--text)" }, { t: "           look up any indicator's live read", c: "var(--text-faint)" }],
-        [{ t: "  graph <name>", c: "var(--text)" }, { t: "          trend chart for any indicator", c: "var(--text-faint)" }],
-        [{ t: "  stats <name>", c: "var(--text)" }, { t: "          extra stats behind that indicator's card", c: "var(--text-faint)" }],
+        [{ t: "  read <name>", c: "var(--text)" }, { t: "           full card for any indicator: value, score, chart, every stat", c: "var(--text-faint)" }],
         [{ t: "  movers", c: "var(--text)" }, { t: "                strongest signals right now", c: "var(--text-faint)" }],
         [{ t: "macro bias / replay", c: "var(--text-faint)" }],
         [{ t: "  bias [timeframe] [scope]", c: "var(--text)" }, { t: "  e.g. bias, or bias month stocks", c: "var(--text-faint)" }],
@@ -311,85 +378,109 @@ export default function TerminalPage({ panels, markets }: { panels: MacroPanel[]
       return;
     }
 
-    if (verb === "read" || verb === "get") {
+    if (verb === "read") {
       const arg = args.join(" ");
       if (!arg) {
         emit([[{ t: "usage: read <name>  e.g. read cpi", c: "var(--text-faint)" }]]);
         return;
       }
-      const hits = indicators.filter((i) => i.name.toLowerCase().includes(arg) || i.id.toLowerCase().includes(arg));
+      const hits = allSeries.filter((s) => s.name.toLowerCase().includes(arg) || s.id.toLowerCase().includes(arg));
       if (hits.length === 0) {
         emit([[{ t: `no indicator matching "${arg}"`, c: "var(--down)" }]]);
         return;
       }
-      const shown = hits.slice(0, 10);
-      emit([
-        ...shown.map(indicatorLine),
-        ...(shown.length === 1 ? [[{ t: shown[0].note, c: "var(--text-faint)" }] as Token[]] : []),
-        ...(hits.length > shown.length ? [[{ t: `…${hits.length - shown.length} more`, c: "var(--text-faint)" }] as Token[]] : []),
-      ]);
-      return;
-    }
-
-    if (verb === "stats") {
-      const arg = args.join(" ");
-      if (!arg) {
-        emit([[{ t: "usage: stats <name>  e.g. stats cpi", c: "var(--text-faint)" }]]);
+      if (hits.length > 1) {
+        emit([
+          [{ t: `${hits.length} indicators matching "${arg}" — pick one:`, c: "var(--text-dim)" }],
+          ...hits.slice(0, 10).map((s): Token[] => [
+            { t: pad(s.name, 26), c: "var(--text)" },
+            scoreToken(s.zscore, getSignTone(s.id, s.zscore)),
+          ]),
+        ]);
         return;
       }
-      const hit = allSeries.find((s) => s.name.toLowerCase().includes(arg) || s.id.toLowerCase().includes(arg));
-      if (!hit) {
-        emit([[{ t: `no indicator matching "${arg}"`, c: "var(--down)" }]]);
-        return;
-      }
+      // Holistic card — everything the Board card shows when expanded, in
+      // one command: value/score, bias read, every linked asset with its
+      // live correlation, every specialized metric with its own chart, and
+      // the full history chart. No need to remember separate graph/stats/
+      // linked-assets verbs, or open the Board to see the rest of the card.
+      const hit = hits[0];
+      const tone = getSignTone(hit.id, hit.zscore);
+      const bias = getBias(hit.id, hit.zscore);
+      const biasColor = bias ? toneColor(bias.tone) : "var(--text-faint)";
       const extra = hit.extraStats ?? [];
-      emit([
-        [{ t: hit.name, c: "var(--text)" }, { t: `  ${hit.windowLabel ?? ""}`, c: "var(--text-faint)" }],
-        ...(extra.length === 0
-          ? [[{ t: "no extra stats stored for this indicator", c: "var(--text-faint)" }] as Token[]]
-          : extra.map(
-              (e): Token[] => [
-                { t: pad(e.label, 26), c: "var(--text-dim)" },
-                { t: e.value, c: e.flag ? "var(--down)" : "var(--text)" },
-                ...(e.caption ? [{ t: `  ${e.caption}`, c: "var(--text-faint)" }] : []),
-              ]
-            )),
-      ]);
-      return;
-    }
-
-    if (verb === "graph") {
-      const arg = args.join(" ");
-      if (!arg) {
-        emit([[{ t: "usage: graph <name>  e.g. graph cpi", c: "var(--text-faint)" }]]);
-        return;
-      }
-      const hit = allSeries.find((s) => s.name.toLowerCase().includes(arg) || s.id.toLowerCase().includes(arg));
-      if (!hit) {
-        emit([[{ t: `no indicator matching "${arg}"`, c: "var(--down)" }]]);
-        return;
-      }
       const series = hit.sparkline && hit.sparkline.length >= 5 ? hit.sparkline : (hit.history ?? []).map((p) => p.value);
-      if (series.length < 5) {
-        emit([[{ t: `not enough history to chart ${hit.name} yet`, c: "var(--text-faint)" }]]);
-        return;
+      const batch: LineContent[] = [
+        [
+          { t: pad(hit.name, 26), c: "var(--text)" },
+          { t: hit.value.padStart(9).slice(0, 9) + " ", c: "var(--text-dim)" },
+          scoreToken(hit.zscore, tone),
+        ],
+        [{ t: hit.note, c: "var(--text-faint)" }],
+        ...(bias ? [[{ t: bias.label, c: biasColor }] as Token[]] : []),
+        [{ t: `source: ${hit.source}${hit.windowLabel ? `  ·  ${hit.windowLabel}` : ""}`, c: "var(--text-faint)" }],
+      ];
+
+      const impacts = IMPACTS[hit.id] ?? [];
+      const linked = impacts
+        .map((impact) => ({ impact, market: markets.find((m) => m.id === marketRowId(impact.symbol)) }))
+        .filter((x): x is { impact: (typeof impacts)[number]; market: MarketRow } => !!x.market);
+      if (linked.length > 0) {
+        batch.push([{ t: `linked assets (${linked.length})`, c: "var(--text-dim)" }]);
+        for (const { impact, market } of linked) {
+          const r =
+            hit.history && market.history && market.history.length >= 20
+              ? changeCorrelation(hit.history, market.history, 6)
+              : null;
+          batch.push([
+            { t: `  ${impact.sign > 0 ? "↑" : "↓"} `, c: impact.sign > 0 ? "var(--up)" : "var(--down)" },
+            { t: pad(market.name, 22), c: "var(--text)" },
+            { t: market.value.padStart(9) + "  ", c: "var(--text-dim)" },
+            { t: `wt ${(impact.weight * 100).toFixed(0)}%`, c: "var(--text-faint)" },
+            ...(r !== null ? [{ t: `  r ${r > 0 ? "+" : ""}${r.toFixed(2)}`, c: "var(--text-faint)" }] : []),
+          ]);
+        }
       }
-      const first = series[0];
-      const last = series[series.length - 1];
-      const changePct = first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
-      emit([
-        [{ t: hit.name, c: "var(--text)" }, { t: `  ${hit.windowLabel ?? ""}`, c: "var(--text-faint)" }],
-        [
-          { t: asciiSparkline(series), c: changePct >= 0 ? "var(--up)" : "var(--down)" },
-        ],
-        [
-          { t: `low ${Math.min(...series).toFixed(2)}`, c: "var(--text-faint)" },
-          { t: "   " },
-          { t: `high ${Math.max(...series).toFixed(2)}`, c: "var(--text-faint)" },
-          { t: "   " },
-          { t: `${changePct >= 0 ? "+" : ""}${changePct.toFixed(1)}% over window`, c: changePct >= 0 ? "var(--up)" : "var(--down)" },
-        ],
-      ]);
+
+      if (series.length >= 5) {
+        const first = series[0];
+        const last = series[series.length - 1];
+        const changePct = first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
+        const chartTone: "up" | "down" | "flat" = changePct > 0 ? "up" : changePct < 0 ? "down" : "flat";
+        batch.push(
+          [{ t: "history", c: "var(--text-dim)" }],
+          { node: <LineChart key={`chart-${hit.id}-${Date.now()}`} values={series} tone={chartTone} /> },
+          [
+            { t: `low ${Math.min(...series).toFixed(2)}`, c: "var(--text-faint)" },
+            { t: "   " },
+            { t: `high ${Math.max(...series).toFixed(2)}`, c: "var(--text-faint)" },
+            { t: "   " },
+            { t: `${changePct >= 0 ? "+" : ""}${changePct.toFixed(1)}% over window`, c: changePct >= 0 ? "var(--up)" : "var(--down)" },
+          ]
+        );
+      }
+
+      if (extra.length > 0) {
+        batch.push([{ t: `specialized metrics (${extra.length})`, c: "var(--text-dim)" }]);
+        for (const e of extra) {
+          batch.push([
+            { t: pad(e.label, 26), c: "var(--text-dim)" },
+            { t: e.value, c: e.flag ? "var(--down)" : "var(--text)" },
+            ...(e.flag ? [{ t: "  ⚑ flagged", c: "var(--down)" }] : []),
+          ]);
+          if (e.caption) batch.push([{ t: `  ${e.caption}`, c: "var(--text-faint)" }]);
+          if (e.history && e.history.length >= 10) {
+            const vals = e.history.map((p) => p.value);
+            batch.push({ node: <LineChart key={`stat-${hit.id}-${e.label}-${Date.now()}`} values={vals} tone={e.flag ? "down" : "flat"} /> });
+            if (e.threshold !== undefined) {
+              batch.push([{ t: `  threshold ${e.threshold}`, c: "var(--text-faint)" }]);
+            }
+          }
+          if (e.windowLabel) batch.push([{ t: `  ${e.windowLabel}`, c: "var(--text-faint)" }]);
+        }
+      }
+
+      emit(batch);
       return;
     }
 
@@ -663,77 +754,156 @@ export default function TerminalPage({ panels, markets }: { panels: MacroPanel[]
     }
   }
 
+  function runOrFill(item: MenuItem) {
+    if (item.fill) {
+      setInput(item.cmd + " ");
+    } else {
+      void run(item.cmd);
+      setInput("");
+    }
+    inputRef.current?.focus();
+  }
+
   return (
-    <div
-      className="hud relative flex h-[calc(100vh-11rem)] min-h-[520px] flex-col overflow-hidden border border-[var(--border-strong)] bg-[var(--panel)]"
-      style={{ boxShadow: "0 0 60px -20px color-mix(in srgb, var(--text) 18%, transparent)" }}
-    >
+    <div className="flex h-[calc(100vh-11rem)] min-h-[560px] gap-4">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px"
-        style={{ background: "linear-gradient(90deg, transparent, var(--text-dim), transparent)" }}
-      />
-
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 font-mono text-[0.76rem] leading-[1.55]" onClick={() => inputRef.current?.focus()}>
-        {lines.map((line) => (
-          <div key={line.id} className="terminal-line whitespace-pre-wrap break-words">
-            {line.tokens.map((tok, i) => (
-              <span key={i} style={tok.c ? { color: tok.c } : undefined}>
-                {tok.t}
-              </span>
-            ))}
-          </div>
-        ))}
-        {busy && (
-          <div className="terminal-line" style={{ color: "var(--text-faint)" }}>
-            <span className="animate-pulse">…computing</span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-[var(--border)] px-4 py-2">
-        {liveSuggestions.length === 0 ? (
-          <span className="font-mono text-[0.62rem] text-[var(--text-faint)]">no matches — try help</span>
-        ) : (
-          liveSuggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => {
-                if (isEmptyInput) {
-                  void run(s);
-                  setInput("");
-                } else {
-                  setInput(s + " ");
-                }
-                inputRef.current?.focus();
-              }}
-              disabled={busy}
-              className="border border-[var(--border)] px-2.5 py-1 font-mono text-[0.64rem] text-[var(--text-dim)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-40"
-            >
-              {s}
-            </button>
-          ))
-        )}
-      </div>
-
-      <form onSubmit={submit} className="flex shrink-0 items-center gap-2 border-t border-[var(--border-strong)] bg-[var(--panel-2)] px-4 py-3">
-        <span className="shrink-0 text-[var(--up)]">›</span>
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          spellCheck={false}
-          autoComplete="off"
-          autoCapitalize="none"
-          enterKeyHint="go"
-          autoFocus
-          aria-label="Terminal command"
-          className="w-full bg-transparent font-mono text-[16px] text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] sm:text-[0.8rem]"
-          placeholder="try: bias this month stocks"
+        className="hud relative flex min-w-0 flex-1 flex-col overflow-hidden border border-[var(--border-strong)] bg-[var(--panel)]"
+        style={{ boxShadow: "0 0 60px -20px color-mix(in srgb, var(--text) 18%, transparent)" }}
+      >
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-px"
+          style={{ background: "linear-gradient(90deg, transparent, var(--text-dim), transparent)" }}
         />
-        <span className="blink-cursor h-[1em] w-[0.55ch] shrink-0 bg-[var(--text-dim)]" aria-hidden />
-      </form>
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 font-mono text-[0.76rem] leading-[1.55]" onClick={() => inputRef.current?.focus()}>
+          {lines.map((line) => (
+            <div key={line.id} className="terminal-line whitespace-pre-wrap break-words">
+              {Array.isArray(line.content)
+                ? line.content.map((tok, i) => (
+                    <span key={i} style={tok.c ? { color: tok.c } : undefined}>
+                      {tok.t}
+                    </span>
+                  ))
+                : <div className="max-w-md py-1">{line.content.node}</div>}
+            </div>
+          ))}
+          {busy && (
+            <div className="terminal-line" style={{ color: "var(--text-faint)" }}>
+              <span className="animate-pulse">…computing</span>
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 border-t border-[var(--border)]">
+          {isEmptyInput ? (
+            <div className="flex flex-wrap items-center gap-1.5 px-4 py-2">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    void run(s);
+                    setInput("");
+                    inputRef.current?.focus();
+                  }}
+                  disabled={busy}
+                  className="border border-[var(--border)] px-2.5 py-1 font-mono text-[0.64rem] text-[var(--text-dim)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-40"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : liveSuggestions.length === 0 ? (
+            <div className="px-4 py-2">
+              <span className="font-mono text-[0.62rem] text-[var(--text-faint)]">no matches — try help</span>
+            </div>
+          ) : (
+            // Every possible next word, not a truncated top-N — first-time
+            // users shouldn't have to guess or memorize. Wrapped chips in a
+            // height-capped scroll area keep this compact instead of a tall
+            // one-per-row list eating the screen, while still holding every match.
+            <div className="flex max-h-20 flex-wrap items-center gap-1 overflow-y-auto px-3 py-1.5">
+              {liveSuggestions.map((s, i) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setInput(s + " ");
+                    inputRef.current?.focus();
+                  }}
+                  disabled={busy}
+                  title={i === 0 ? "Tab to accept" : undefined}
+                  className={`border px-1.5 py-0.5 font-mono text-[0.62rem] transition-colors duration-100 hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-40 ${
+                    i === 0
+                      ? "border-[var(--up)] text-[var(--text)]"
+                      : "border-[var(--border)] text-[var(--text-dim)]"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={submit} className="flex shrink-0 items-center gap-2 border-t border-[var(--border-strong)] bg-[var(--panel-2)] px-4 py-3">
+          <span className="shrink-0 text-[var(--up)]">›</span>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            spellCheck={false}
+            autoComplete="off"
+            autoCapitalize="none"
+            enterKeyHint="go"
+            autoFocus
+            aria-label="Terminal command"
+            className="w-full bg-transparent font-mono text-[16px] text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] sm:text-[0.8rem]"
+            placeholder="try: bias this month stocks"
+          />
+          <span className="blink-cursor h-[1em] w-[0.55ch] shrink-0 bg-[var(--text-dim)]" aria-hidden />
+        </form>
+      </div>
+
+      <aside className="hud hidden w-[30%] max-w-xs shrink-0 flex-col overflow-hidden border border-[var(--border)] bg-[var(--panel)] lg:flex xl:max-w-sm">
+        <div className="shrink-0 border-b border-[var(--border)] px-4 py-2.5">
+          <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-[var(--text-faint)]">Command reference</span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 py-3">
+          {COMMAND_MENU.map((group) => (
+            <div key={group.title || "misc"} className="mb-4 last:mb-0">
+              {group.title && (
+                <div className="mb-1.5 px-1 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-[var(--text-faint)]">
+                  {group.title}
+                </div>
+              )}
+              <div className="flex flex-col gap-0.5">
+                {group.items.map((item) => (
+                  <button
+                    key={item.cmd}
+                    type="button"
+                    onClick={() => runOrFill(item)}
+                    disabled={busy}
+                    className="group flex flex-col items-start gap-0.5 px-2 py-1.5 text-left transition-colors duration-150 hover:bg-[var(--panel-2)] disabled:opacity-40"
+                  >
+                    <span className="font-mono text-[0.7rem] text-[var(--text)] group-hover:text-[var(--up)]">
+                      {item.cmd}
+                      {item.fill && <span className="ml-1 text-[var(--text-faint)]">…</span>}
+                    </span>
+                    <span className="font-sans text-[0.65rem] leading-tight text-[var(--text-faint)]">{item.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="mt-2 border-t border-[var(--border)] px-1 pt-3 font-sans text-[0.62rem] leading-relaxed text-[var(--text-faint)]">
+            Type plain English too — words like <em>week</em>, <em>quarter</em>, <em>stocks</em>, <em>gold</em> all
+            resolve on their own. Click anything above to run it, or to drop it into the command line if it needs a
+            name or date.
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
