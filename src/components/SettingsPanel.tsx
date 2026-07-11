@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACCENT_PRESETS, applyThemePrefs, loadThemePrefs, saveThemePrefs, type AccentPreset, type ThemeMode, type MotionPref } from "@/lib/theme";
 import { SegmentedControl } from "@/components/BiasView";
 
@@ -17,15 +17,18 @@ export default function SettingsPanel() {
   const [open, setOpen] = useState(false);
   // Fixed-position coordinates so the popover escapes the sidebar's
   // overflow-y-auto (absolute positioning gets clipped/scrolled inside it).
-  // maxHeight caps it to the space actually available above the gear button
-  // - previously unbounded, so on shorter screens the popover grew past the
-  // top of the viewport and the Theme row silently rendered off-screen.
-  const [pos, setPos] = useState<{ left: number; bottom: number; maxHeight: number } | null>(null);
+  // Computed by measuring the popover's actual rendered height (see the
+  // layout effect below) rather than guessing - a guessed cap based only on
+  // space-above-the-button still clipped content whenever the guess came in
+  // a little short, with no visible scrollbar to reveal the rest.
+  type Pos = { left: number; top?: number; bottom?: number; maxHeight: number };
+  const [pos, setPos] = useState<Pos | null>(null);
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [accent, setAccent] = useState<AccentPreset>("mono");
   const [motion, setMotion] = useState<MotionPref>("on");
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const prefs = loadThemePrefs();
@@ -48,21 +51,33 @@ export default function SettingsPanel() {
   }, [open]);
 
   function toggleOpen() {
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      // Clamp inside the viewport: the popover is 240px wide (w-60) and the
-      // gear sits near the sidebar's right edge, so on narrow screens the
-      // unclamped position ran off the right side and got cut off.
-      const width = 240;
-      const left = Math.max(8, Math.min(r.left - 8, window.innerWidth - width - 8));
-      // Popover opens upward from the gear - cap its height to the space
-      // actually above it (minus a margin) and let it scroll internally
-      // instead of extending past the top of the viewport unseen.
-      const maxHeight = Math.max(160, r.top - 16);
-      setPos({ left, bottom: window.innerHeight - r.top + 8, maxHeight });
-    }
     setOpen((v) => !v);
   }
+
+  // Runs after the popover is in the DOM (invisible, at a neutral spot) but
+  // before paint, so its real height is known before we decide where it
+  // goes - flips to open downward when there isn't room above, and only
+  // falls back to an internal scroll if neither direction has enough space.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    if (!btnRef.current || !popRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const width = 240;
+    const left = Math.max(8, Math.min(r.left - 8, window.innerWidth - width - 8));
+    const margin = 8;
+    const height = popRef.current.getBoundingClientRect().height;
+    const spaceAbove = r.top - margin * 2;
+    const spaceBelow = window.innerHeight - r.bottom - margin * 2;
+
+    if (height <= spaceAbove || spaceAbove >= spaceBelow) {
+      setPos({ left, bottom: window.innerHeight - r.top + margin, maxHeight: Math.max(120, spaceAbove) });
+    } else {
+      setPos({ left, top: r.bottom + margin, maxHeight: Math.max(120, spaceBelow) });
+    }
+  }, [open]);
 
   function updateTheme(next: ThemeMode) {
     setTheme(next);
@@ -93,10 +108,18 @@ export default function SettingsPanel() {
         <GearIcon />
       </button>
 
-      {open && pos && (
+      {open && (
         <div
+          ref={popRef}
           className="z-50 w-60 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--panel-2)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
-          style={{ position: "fixed", left: pos.left, bottom: pos.bottom, maxHeight: pos.maxHeight }}
+          style={{
+            position: "fixed",
+            left: pos?.left ?? -9999,
+            top: pos?.top,
+            bottom: pos?.top === undefined ? pos?.bottom ?? 0 : undefined,
+            maxHeight: pos?.maxHeight,
+            visibility: pos ? "visible" : "hidden",
+          }}
         >
           <div className="mb-3">
             <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Theme</div>
