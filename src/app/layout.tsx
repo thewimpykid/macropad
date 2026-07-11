@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, JetBrains_Mono } from "next/font/google";
+import { Geist, JetBrains_Mono, Inter, Space_Grotesk, IBM_Plex_Mono, Fira_Code } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import TerrainBackdrop from "@/components/fx/TerrainBackdrop";
 import ThemeSync from "@/components/fx/ThemeSync";
@@ -13,6 +13,29 @@ const geistSans = Geist({
 
 const jetMono = JetBrains_Mono({
   variable: "--font-jet",
+  subsets: ["latin"],
+});
+
+// Alternate font presets for the settings panel. next/font self-hosts and
+// only ships @font-face CSS - files download solely when a preset is active.
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-grotesk",
+  subsets: ["latin"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const firaCode = Fira_Code({
+  variable: "--font-fira",
   subsets: ["latin"],
 });
 
@@ -32,7 +55,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${jetMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${jetMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable} ${firaCode.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>

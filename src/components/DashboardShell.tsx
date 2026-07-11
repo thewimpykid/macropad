@@ -23,6 +23,7 @@ import BrandMark from "@/components/fx/BrandMark";
 import AsciiContour from "@/components/fx/AsciiContour";
 import SettingsPanel from "@/components/SettingsPanel";
 import { loadNavOrder, saveNavOrder, moveToPosition, type NavOrderState } from "@/lib/navOrder";
+import { PREFS_EVENT, loadThemePrefs, type ControlsPos, type SidebarSide, type ThemePrefs } from "@/lib/theme";
 
 const DEEP_PANELS = new Set(["us-macro", "yield-rates", "cot-positioning", "transmission", "geopolitics", "volatility"]);
 /** Catalogue-only panels - carry data (e.g. per-asset news) but never show up as their own nav entry. */
@@ -248,6 +249,21 @@ export default function DashboardShell({
 }) {
   const [activeId, setActiveId] = useState(BOARD_ID);
   const [navOpen, setNavOpen] = useState(false);
+  // Layout prefs from the settings panel: which side the sidebar lives on and
+  // where the utility bar (clock/settings/sign-out) sits inside it. Loaded
+  // after mount (localStorage) and kept live via the prefs event.
+  const [sidebarSide, setSidebarSide] = useState<SidebarSide>("left");
+  const [controlsPos, setControlsPos] = useState<ControlsPos>("bottom");
+  useEffect(() => {
+    const applyLayout = (p: { sidebar: SidebarSide; controls: ControlsPos }) => {
+      setSidebarSide(p.sidebar);
+      setControlsPos(p.controls);
+    };
+    applyLayout(loadThemePrefs());
+    const onPrefs = (e: Event) => applyLayout((e as CustomEvent<ThemePrefs>).detail);
+    window.addEventListener(PREFS_EVENT, onPrefs);
+    return () => window.removeEventListener(PREFS_EVENT, onPrefs);
+  }, []);
   const [newsAssetTab, setNewsAssetTab] = useState<string>(""); // "" = general macro feed
   const visiblePanels = panels.filter((p) => !HIDDEN_PANELS.has(p.id));
   const active = visiblePanels.find((p) => p.id === activeId);
@@ -382,6 +398,21 @@ export default function DashboardShell({
                   ? activeOptionsFlow.label
                   : active?.title ?? "";
 
+  // Clock + settings + sign-out. Always visible (the nav scrolls internally
+  // now, so this no longer sinks to the bottom of long pages like Docs) and
+  // placeable at either end of the sidebar.
+  const utilityBar = (
+    <div className={`shrink-0 px-4 py-3 ${controlsPos === "top" ? "border-b" : "border-t"} border-[var(--border)]`}>
+      <div className="flex items-center justify-between font-mono text-[0.62rem] text-[var(--text-faint)]">
+        <Clock />
+        <div className="flex items-center gap-3">
+          <SettingsPanel />
+          <SignOutButton className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-[var(--text-faint)] transition-colors duration-150 hover:text-[var(--text)] disabled:opacity-50" />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen flex-col">
       <MarketTicker markets={markets} />
@@ -410,9 +441,11 @@ export default function DashboardShell({
 
       <div className="flex flex-1">
         <aside
-          className={`fixed inset-y-0 left-0 z-40 flex w-[236px] shrink-0 -translate-x-full flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--panel)] transition-transform duration-200 lg:static lg:translate-x-0 ${
-            navOpen ? "translate-x-0" : ""
-          }`}
+          className={`fixed inset-y-0 z-40 flex w-[236px] shrink-0 flex-col bg-[var(--panel)] transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+            sidebarSide === "right"
+              ? "right-0 border-l border-[var(--border)] lg:order-2"
+              : "left-0 border-r border-[var(--border)]"
+          } ${navOpen ? "translate-x-0" : sidebarSide === "right" ? "translate-x-full" : "-translate-x-full"}`}
           style={{ transitionTimingFunction: "var(--ease-out)" }}
         >
           <div className="relative hidden overflow-hidden border-b border-[var(--border)] px-4 pb-5 pt-6 lg:block">
@@ -429,7 +462,9 @@ export default function DashboardShell({
             </div>
           </div>
 
-          <nav className="flex flex-1 flex-col py-3">
+          {controlsPos === "top" && utilityBar}
+
+          <nav className="flex flex-1 flex-col overflow-y-auto py-3">
             <NavItem id="board" label="BOARD" isActive={isBoard} onClick={() => pickPage(BOARD_ID)} />
             <NavItem id="terminal" label="TERMINAL" isActive={isTerminal} onClick={() => pickPage(TERMINAL_ID)} />
 
@@ -483,15 +518,7 @@ export default function DashboardShell({
             <NavItem id="docs" label="DOCS" isActive={isDocs} onClick={() => pickPage(DOCS_ID)} />
           </nav>
 
-          <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">
-            <div className="flex items-center justify-between font-mono text-[0.62rem] text-[var(--text-faint)]">
-              <Clock />
-              <div className="flex items-center gap-3">
-                <SettingsPanel />
-                <SignOutButton className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-[var(--text-faint)] transition-colors duration-150 hover:text-[var(--text)] disabled:opacity-50" />
-              </div>
-            </div>
-          </div>
+          {controlsPos === "bottom" && utilityBar}
         </aside>
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">

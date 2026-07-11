@@ -2,7 +2,17 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ACCENT_PRESETS, applyThemePrefs, loadThemePrefs, saveThemePrefs, type AccentPreset, type ThemeMode, type MotionPref } from "@/lib/theme";
+import {
+  ACCENT_PRESETS,
+  DATA_FONTS,
+  DEFAULT_PREFS,
+  SIGNAL_PRESETS,
+  UI_FONTS,
+  applyThemePrefs,
+  loadThemePrefs,
+  saveThemePrefs,
+  type ThemePrefs,
+} from "@/lib/theme";
 import { SegmentedControl } from "@/components/BiasView";
 
 function GearIcon({ className }: { className?: string }) {
@@ -11,6 +21,15 @@ function GearIcon({ className }: { className?: string }) {
       <circle cx="10" cy="10" r="2.6" />
       <path d="M10 2.5V4.3M10 15.7V17.5M17.5 10H15.7M4.3 10H2.5M15.1 4.9L13.8 6.2M6.2 13.8L4.9 15.1M15.1 15.1L13.8 13.8M6.2 6.2L4.9 4.9" />
     </svg>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-3">
+      <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">{label}</div>
+      {children}
+    </div>
   );
 }
 
@@ -24,22 +43,18 @@ export default function SettingsPanel() {
   // a little short, with no visible scrollbar to reveal the rest.
   type Pos = { left: number; top?: number; bottom?: number; maxHeight: number };
   const [pos, setPos] = useState<Pos | null>(null);
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [accent, setAccent] = useState<AccentPreset>("mono");
-  const [motion, setMotion] = useState<MotionPref>("on");
+  const [prefs, setPrefs] = useState<ThemePrefs>(DEFAULT_PREFS);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const prefs = loadThemePrefs();
-    setTheme(prefs.theme);
-    setAccent(prefs.accent);
-    setMotion(prefs.motion);
+    const stored = loadThemePrefs();
+    setPrefs(stored);
     // Re-assert on mount: hydration recovery can wipe the <html> attributes
     // the pre-paint init script set, which left the UI saying "light" while
     // the page rendered dark.
-    applyThemePrefs(prefs.theme, prefs.accent, prefs.motion);
+    applyThemePrefs(stored);
   }, []);
 
   useEffect(() => {
@@ -69,7 +84,7 @@ export default function SettingsPanel() {
     }
     if (!btnRef.current || !popRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
-    const width = 240;
+    const width = 256;
     const left = Math.max(8, Math.min(r.left - 8, window.innerWidth - width - 8));
     const margin = 8;
     const height = popRef.current.getBoundingClientRect().height;
@@ -83,22 +98,13 @@ export default function SettingsPanel() {
     }
   }, [open]);
 
-  function updateTheme(next: ThemeMode) {
-    setTheme(next);
-    applyThemePrefs(next, accent, motion);
-    saveThemePrefs(next, accent, motion);
-  }
-
-  function updateAccent(next: AccentPreset) {
-    setAccent(next);
-    applyThemePrefs(theme, next, motion);
-    saveThemePrefs(theme, next, motion);
-  }
-
-  function updateMotion(next: MotionPref) {
-    setMotion(next);
-    applyThemePrefs(theme, accent, next);
-    saveThemePrefs(theme, accent, next);
+  function update(patch: Partial<ThemePrefs>) {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      applyThemePrefs(next);
+      saveThemePrefs(next);
+      return next;
+    });
   }
 
   return (
@@ -122,7 +128,7 @@ export default function SettingsPanel() {
           // matter how its height/position math was tuned.
           <div
             ref={popRef}
-            className="z-50 w-60 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--panel-2)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
+            className="z-50 w-64 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--panel-2)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
             style={{
               position: "fixed",
               left: pos?.left ?? -9999,
@@ -132,52 +138,116 @@ export default function SettingsPanel() {
               visibility: pos ? "visible" : "hidden",
             }}
           >
-            <div className="mb-3">
-              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Theme</div>
+            <Section label="Theme">
               <SegmentedControl
                 options={[
                   { id: "dark" as const, label: "Dark" },
                   { id: "light" as const, label: "Light" },
                 ]}
-                value={theme}
-                onChange={updateTheme}
+                value={prefs.theme}
+                onChange={(theme) => update({ theme })}
                 grow
               />
-            </div>
+            </Section>
 
-            <div className="mb-3">
-              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Backdrop</div>
+            <Section label="Backdrop">
               <SegmentedControl
                 options={[
                   { id: "on" as const, label: "Background" },
                   { id: "off" as const, label: "Solid color" },
                 ]}
-                value={motion}
-                onChange={updateMotion}
+                value={prefs.motion}
+                onChange={(motion) => update({ motion })}
                 grow
               />
-            </div>
+            </Section>
 
-            <div className="mb-3">
-              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Accent</div>
+            <Section label="Accent">
               <div className="flex flex-wrap gap-1.5">
                 {ACCENT_PRESETS.map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => updateAccent(p.id)}
+                    onClick={() => update({ accent: p.id })}
                     aria-label={p.label}
                     title={p.label}
                     className="flex h-6 w-6 items-center justify-center rounded-full border transition-transform"
                     style={{
-                      borderColor: accent === p.id ? "var(--text)" : "var(--border)",
-                      transform: accent === p.id ? "scale(1.08)" : undefined,
+                      borderColor: prefs.accent === p.id ? "var(--text)" : "var(--border)",
+                      transform: prefs.accent === p.id ? "scale(1.08)" : undefined,
                     }}
                   >
                     <span className="h-3.5 w-3.5 rounded-full border border-[var(--border)]" style={{ background: p.swatch }} />
                   </button>
                 ))}
               </div>
-            </div>
+            </Section>
+
+            <Section label="Bull / bear colors">
+              <div className="flex flex-col gap-1">
+                {SIGNAL_PRESETS.map((p) => {
+                  const on = prefs.signal === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => update({ signal: p.id })}
+                      className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-left font-sans text-[0.7rem] font-semibold transition-colors ${
+                        on ? "border-[var(--text-dim)] text-[var(--text)]" : "border-[var(--border)] text-[var(--text-faint)] hover:text-[var(--text-dim)]"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1 font-mono text-[0.66rem]">
+                        <span style={{ color: p.up }}>▲</span>
+                        <span style={{ color: p.down }}>▼</span>
+                      </span>
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Section>
+
+            <Section label="Interface font">
+              <SegmentedControl options={UI_FONTS} value={prefs.uiFont} onChange={(uiFont) => update({ uiFont })} grow />
+            </Section>
+
+            <Section label="Data font">
+              <SegmentedControl options={DATA_FONTS} value={prefs.dataFont} onChange={(dataFont) => update({ dataFont })} grow />
+            </Section>
+
+            <Section label="Density">
+              <SegmentedControl
+                options={[
+                  { id: "comfortable" as const, label: "Comfortable" },
+                  { id: "compact" as const, label: "Compact" },
+                ]}
+                value={prefs.density}
+                onChange={(density) => update({ density })}
+                grow
+              />
+            </Section>
+
+            <Section label="Sidebar">
+              <SegmentedControl
+                options={[
+                  { id: "left" as const, label: "Left" },
+                  { id: "right" as const, label: "Right" },
+                ]}
+                value={prefs.sidebar}
+                onChange={(sidebar) => update({ sidebar })}
+                grow
+              />
+            </Section>
+
+            <Section label="Controls bar">
+              <SegmentedControl
+                options={[
+                  { id: "bottom" as const, label: "Bottom" },
+                  { id: "top" as const, label: "Top" },
+                ]}
+                value={prefs.controls}
+                onChange={(controls) => update({ controls })}
+                grow
+              />
+            </Section>
 
             <p className="m-0 font-sans text-[0.62rem] leading-snug text-[var(--text-faint)]">
               Tip: drag a tab by the grip on its right edge to reorder. Board and Docs stay pinned.
