@@ -9,13 +9,19 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/app";
+  // Only ever redirect to a local path: `next` comes from the query string,
+  // so without this check ?next=@evil.com or ?next=//evil.com becomes an
+  // open redirect on a link users inherently trust (it arrives via our own
+  // password-reset email).
+  const rawNext = searchParams.get("next") ?? "/app";
+  const isSafe = rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\");
+  const next = isSafe ? rawNext : "/app";
 
   if (code) {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(new URL(next, origin));
     }
   }
 
