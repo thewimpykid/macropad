@@ -146,11 +146,11 @@ export default function SettingsPanel() {
             </div>
 
             <div className="mb-3">
-              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Background</div>
+              <div className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--text-faint)]">Backdrop</div>
               <SegmentedControl
                 options={[
-                  { id: "on" as const, label: "Moving" },
-                  { id: "off" as const, label: "Still" },
+                  { id: "on" as const, label: "Background" },
+                  { id: "off" as const, label: "Solid color" },
                 ]}
                 value={motion}
                 onChange={updateMotion}
