@@ -1,5 +1,24 @@
 import { supabaseAdmin } from "@/lib/supabaseServer";
 import { macroPanels, type MacroPanel, type MacroSeries, type SeriesStatus, type HistoryPoint, type ExtraStat, type SeriesPayload } from "@/lib/macroData";
+import { decodeXmlEntities } from "@/lib/rss";
+
+/*
+ * Headlines ingested before the RSS decoder handled numeric/named entities
+ * were stored with raw "&apos;"/"&#x2018;" sequences, and refreshes only
+ * append - old rows never get rewritten. Decode again on the way out so the
+ * whole stored history is clean regardless of when it was ingested.
+ */
+function cleanPayload(payload: SeriesPayload | null): SeriesPayload | null {
+  if (!payload?.headlines?.length) return payload;
+  return {
+    ...payload,
+    headlines: payload.headlines.map((h) => ({
+      ...h,
+      title: decodeXmlEntities(h.title),
+      description: h.description ? decodeXmlEntities(h.description) : h.description,
+    })),
+  };
+}
 
 /*
  * `source` is never sent to the client. It lives only in the static catalogue

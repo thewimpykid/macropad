@@ -11,7 +11,8 @@ const NAMED_ENTITIES: Record<string, string> = {
   lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
 };
 
-function decodeXmlEntities(s: string): string {
+/** Exported so read paths can re-decode headlines stored before this decoder handled numeric/named entities. */
+export function decodeXmlEntities(s: string): string {
   // Two passes so double-encoded feeds ("&amp;#x2018;") fully unwrap.
   let out = s;
   for (let pass = 0; pass < 2 && out.includes("&"); pass++) {
