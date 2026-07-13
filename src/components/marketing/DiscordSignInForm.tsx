@@ -48,22 +48,9 @@ export default function DiscordSignInForm() {
       </p>
 
       {errorCode && (
-        <div className="mt-6">
-          <p className="m-0 font-mono text-[0.72rem] leading-relaxed" style={{ color: "var(--down)" }}>
-            ERR: {ERROR_MESSAGES[errorCode] ?? "Sign-in failed. Try again."}
-          </p>
-          {errorCode === "not_in_server" && DISCORD_INVITE_URL && (
-            <a
-              href={DISCORD_INVITE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-primary mt-3 flex w-full items-center justify-center gap-2"
-            >
-              <DiscordIcon />
-              Join the server
-            </a>
-          )}
-        </div>
+        <p className="m-0 mt-6 font-mono text-[0.72rem] leading-relaxed" style={{ color: "var(--down)" }}>
+          ERR: {ERROR_MESSAGES[errorCode] ?? "Sign-in failed. Try again."}
+        </p>
       )}
 
       <button
@@ -75,6 +62,18 @@ export default function DiscordSignInForm() {
         <DiscordIcon />
         {pending ? "Redirecting…" : "Continue with Discord"}
       </button>
+
+      {DISCORD_INVITE_URL && (
+        <a
+          href={DISCORD_INVITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-primary mt-3 flex w-full items-center justify-center gap-2"
+        >
+          <DiscordIcon />
+          Join the server
+        </a>
+      )}
     </div>
   );
 }
