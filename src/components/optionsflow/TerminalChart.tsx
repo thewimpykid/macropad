@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { fmtNum, fmtUsd } from "@/lib/gex";
 
@@ -194,11 +195,19 @@ export function TerminalDualBarChart({
   );
 }
 
-function divergingColor(value: number, maxAbs: number): string {
+/** Alternate diverging color pairs for the heatmap - a plain up/down pair, a colorblind-friendly blue/orange pair, and a single-hue magnitude ramp for when direction matters less than concentration. */
+const HEATMAP_PALETTES: { id: string; label: string; pos: string; neg: string; mono?: boolean }[] = [
+  { id: "default", label: "DEFAULT", pos: "var(--up)", neg: "var(--down)" },
+  { id: "blue-orange", label: "BLUE/ORANGE", pos: "#3b82f6", neg: "#f97316" },
+  { id: "violet-gold", label: "VIOLET/GOLD", pos: "#a78bfa", neg: "#facc15" },
+  { id: "heat", label: "HEAT", pos: "#f97316", neg: "#f97316", mono: true },
+];
+
+function divergingColor(value: number, maxAbs: number, palette: (typeof HEATMAP_PALETTES)[number]): string {
   if (maxAbs <= 0) return "var(--panel-2)";
   const t = Math.max(-1, Math.min(1, value / maxAbs));
   const pct = Math.round(Math.pow(Math.abs(t), 0.6) * 85);
-  const base = t >= 0 ? "var(--up)" : "var(--down)";
+  const base = palette.mono ? palette.pos : t >= 0 ? palette.pos : palette.neg;
   return `color-mix(in srgb, ${base} ${pct}%, var(--panel-2) ${100 - pct}%)`;
 }
 
@@ -208,7 +217,7 @@ export interface StrikeExpiryHeatmapData {
   values: (number | null)[][];
 }
 
-/** Strike x expiry grid for one selected Greek: rows are strikes (highest at top), columns are expirations, cell color diverges call-green/put-pink by magnitude. Overlays dashed reference lines for the walls/flip passed in. */
+/** Strike x expiry grid for one selected Greek: rows are strikes (highest at top), columns are expirations, cell color diverges call-green/put-pink by magnitude. Overlays dashed reference lines for the walls/flip passed in. Scrollable (own max-height, sticky strike column + expiry footer), hoverable (per-cell highlight), and clickable (pins a detail readout instead of relying on the native title tooltip). */
 export function StrikeExpiryHeatmapChart({
   grid,
   spot,
@@ -223,57 +232,102 @@ export function StrikeExpiryHeatmapChart({
   /** Defaults to $-formatted; pass fmtRaw when the grid comes from /heatmap - see TerminalExposureChart. */
   valueFormatter?: (n: number | null | undefined) => string;
 }) {
+  const [palIdx, setPalIdx] = useState(0);
+  const [hover, setHover] = useState<{ r: number; c: number } | null>(null);
+  const [pinned, setPinned] = useState<{ r: number; c: number } | null>(null);
+
   if (!grid || !grid.strikes.length) return <p className="m-0 py-12 text-center font-mono text-[0.75rem] text-[var(--text-faint)]">No cross-expiry data this request.</p>;
 
   const rows = [...grid.strikes].map((strike, i) => ({ strike, cells: grid.values[i] })).sort((a, b) => b.strike - a.strike);
   const maxAbs = Math.max(1, ...rows.flatMap((r) => r.cells.filter((c): c is number => c !== null).map((c) => Math.abs(c))));
   const spotRowIdx = rows.reduce((best, r, i) => (Math.abs(r.strike - spot) < Math.abs(rows[best].strike - spot) ? i : best), 0);
+  const pal = HEATMAP_PALETTES[palIdx];
+  const active = hover ?? pinned;
+  const activeCell = active ? rows[active.r]?.cells[active.c] ?? null : null;
 
   return (
-    <div className="flex gap-3">
-      <div className="flex flex-1 flex-col gap-px overflow-x-auto">
-        {rows.map((row, rowIdx) => {
-          const wall = walls.find((w) => Math.abs(w.price - row.strike) < (rows[0].strike - rows[Math.min(rows.length - 1, 1)].strike || 1) / 2);
-          return (
-            <div key={row.strike} className="relative flex items-stretch gap-px">
-              <div className="flex w-14 shrink-0 items-center justify-end pr-2 font-mono text-[0.62rem] text-[var(--text-faint)]" style={{ fontWeight: rowIdx === spotRowIdx ? 700 : 400, color: rowIdx === spotRowIdx ? "var(--text)" : undefined }}>
-                ${fmtNum(row.strike, 0)}
-              </div>
-              <div className="flex flex-1 gap-px">
-                {row.cells.map((c, colIdx) => (
-                  <div
-                    key={colIdx}
-                    title={c !== null ? `${row.strike} @ ${grid.columns[colIdx].label}: ${valueFormatter(c)} ${unitLabel}` : "—"}
-                    className="flex h-6 flex-1 items-center justify-center font-mono text-[0.6rem] font-semibold"
-                    style={{ background: c !== null ? divergingColor(c, maxAbs) : "var(--panel-2)", color: "rgba(255,255,255,0.92)" }}
-                  >
-                    {c !== null ? valueFormatter(c) : ""}
-                  </div>
-                ))}
-              </div>
-              {rowIdx === spotRowIdx && <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-[var(--text)]" />}
-              {wall && (
-                <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed" style={{ borderColor: wall.color }}>
-                  <span className="absolute right-0 -translate-y-1/2 rounded-[2px] border px-1.5 py-0.5 font-mono text-[0.56rem] font-semibold" style={{ borderColor: wall.color, color: wall.color, background: "var(--panel)" }}>
-                    {wall.label} {fmtNum(wall.price, 2)}
-                  </span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-        <div className="flex gap-px pl-14">
-          {grid.columns.map((c, i) => (
-            <div key={i} className="flex-1 text-center font-mono text-[0.56rem] text-[var(--text-faint)]">
-              {c.label}
-            </div>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="m-0 min-h-[1.2em] font-mono text-[0.62rem] text-[var(--text-faint)]">
+          {active && activeCell !== null
+            ? `$${fmtNum(rows[active.r].strike, 0)} @ ${grid.columns[active.c].label}: ${valueFormatter(activeCell)} ${unitLabel}${pinned && !hover ? " (pinned - click again to unpin)" : ""}`
+            : "hover or click a cell for detail"}
+        </p>
+        <div className="flex items-center gap-1">
+          {HEATMAP_PALETTES.map((p, i) => (
+            <button
+              key={p.id}
+              onClick={() => setPalIdx(i)}
+              title={p.label}
+              className="h-3.5 w-3.5 rounded-[2px] border transition-transform duration-150 hover:scale-125"
+              style={{
+                borderColor: i === palIdx ? "var(--text)" : "var(--border)",
+                background: p.mono ? p.pos : `linear-gradient(135deg, ${p.pos}, ${p.neg})`,
+              }}
+            />
           ))}
         </div>
       </div>
-      <div className="flex w-6 shrink-0 flex-col items-center gap-1">
-        <span className="font-mono text-[0.5rem] text-[var(--text-faint)]">MAX</span>
-        <div className="w-2 flex-1 rounded-[2px]" style={{ background: "linear-gradient(to bottom, var(--up), var(--panel-2), var(--down))" }} />
-        <span className="font-mono text-[0.5rem] text-[var(--text-faint)]">MAX</span>
+      <div className="flex gap-3">
+        <div className="flex max-h-[420px] flex-1 flex-col gap-px overflow-auto">
+          {rows.map((row, rowIdx) => {
+            const wall = walls.find((w) => Math.abs(w.price - row.strike) < (rows[0].strike - rows[Math.min(rows.length - 1, 1)].strike || 1) / 2);
+            return (
+              <div key={row.strike} className="relative flex items-stretch gap-px">
+                <div
+                  className="sticky left-0 z-10 flex w-14 shrink-0 items-center justify-end bg-[var(--panel)] pr-2 font-mono text-[0.62rem] text-[var(--text-faint)]"
+                  style={{ fontWeight: rowIdx === spotRowIdx ? 700 : 400, color: rowIdx === spotRowIdx ? "var(--text)" : undefined }}
+                >
+                  ${fmtNum(row.strike, 0)}
+                </div>
+                <div className="flex flex-1 gap-px">
+                  {row.cells.map((c, colIdx) => {
+                    const isActive = active?.r === rowIdx && active?.c === colIdx;
+                    return (
+                      <div
+                        key={colIdx}
+                        onMouseEnter={() => setHover({ r: rowIdx, c: colIdx })}
+                        onMouseLeave={() => setHover(null)}
+                        onClick={() => setPinned((p) => (p?.r === rowIdx && p?.c === colIdx ? null : { r: rowIdx, c: colIdx }))}
+                        className="flex h-6 flex-1 cursor-pointer items-center justify-center font-mono text-[0.6rem] font-semibold transition-[transform,filter] duration-150 ease-out"
+                        style={{
+                          background: c !== null ? divergingColor(c, maxAbs, pal) : "var(--panel-2)",
+                          color: "rgba(255,255,255,0.92)",
+                          transform: isActive ? "scale(1.12)" : "scale(1)",
+                          filter: isActive ? "brightness(1.35)" : "brightness(1)",
+                          boxShadow: isActive ? "0 0 0 1px var(--text) inset" : undefined,
+                          zIndex: isActive ? 5 : undefined,
+                        }}
+                      >
+                        {c !== null ? valueFormatter(c) : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+                {rowIdx === spotRowIdx && <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-[var(--text)]" />}
+                {wall && (
+                  <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed" style={{ borderColor: wall.color }}>
+                    <span className="absolute right-0 -translate-y-1/2 rounded-[2px] border px-1.5 py-0.5 font-mono text-[0.56rem] font-semibold" style={{ borderColor: wall.color, color: wall.color, background: "var(--panel)" }}>
+                      {wall.label} {fmtNum(wall.price, 2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div className="sticky bottom-0 flex gap-px bg-[var(--panel)] pl-14">
+            {grid.columns.map((c, i) => (
+              <div key={i} className="flex-1 text-center font-mono text-[0.56rem] text-[var(--text-faint)]">
+                {c.label}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex w-6 shrink-0 flex-col items-center gap-1">
+          <span className="font-mono text-[0.5rem] text-[var(--text-faint)]">MAX</span>
+          <div className="w-2 flex-1 rounded-[2px]" style={{ background: pal.mono ? `linear-gradient(to bottom, ${pal.pos}, var(--panel-2))` : `linear-gradient(to bottom, ${pal.pos}, var(--panel-2), ${pal.neg})` }} />
+          <span className="font-mono text-[0.5rem] text-[var(--text-faint)]">MAX</span>
+        </div>
       </div>
     </div>
   );

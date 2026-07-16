@@ -416,30 +416,43 @@ function TerminalView({
       )}
 
       {/* The one control that matters: which Greek the whole room is tuned
-          to. Spine, terrain and grid all re-tune together - no tabs. */}
+          to. Spine, terrain and grid all re-tune together - no tabs.
+          Effective/Shadow only ever carry real data for GEX (this app
+          doesn't compute a per-Greek scenario delta), so the other five
+          aren't offered as options at all while one of those modes is
+          active, instead of sitting there disabled/misleading. */}
       <div className="hud flex flex-wrap items-center gap-x-4 gap-y-2 border border-[var(--border)] bg-[var(--panel)] px-4 py-2.5">
-        <div className="inline-flex flex-wrap border border-[var(--border)]">
-          {METRIC_ORDER.map((m) => (
-            <button
-              key={m}
-              onClick={() => {
-                setMetric(m);
-                setChartDteIndex(0);
-              }}
-              className={`px-4 py-2 font-mono text-[0.74rem] font-bold tracking-[0.08em] transition-colors duration-150 ${
-                m === metric ? "bg-[var(--accent)] text-[var(--bg)]" : "text-[var(--text-dim)] hover:text-[var(--text)]"
-              }`}
-            >
-              {METRIC_LABEL[m]}
-            </button>
-          ))}
-        </div>
+        {mode === "traditional" ? (
+          <div className="inline-flex flex-wrap border border-[var(--border)]">
+            {METRIC_ORDER.map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setMetric(m);
+                  setChartDteIndex(0);
+                }}
+                className={`px-4 py-2 font-mono text-[0.74rem] font-bold tracking-[0.08em] transition-colors duration-150 ${
+                  m === metric ? "bg-[var(--accent)] text-[var(--bg)]" : "text-[var(--text-dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                {METRIC_LABEL[m]}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="border border-[var(--border)] px-4 py-2 font-mono text-[0.74rem] font-bold tracking-[0.08em] text-[var(--text-dim)]">
+            GAMMA <span className="text-[var(--text-faint)]">only in {CHART_MODE_LABEL[mode]}</span>
+          </div>
+        )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="inline-flex border border-[var(--border)]">
             {CHART_MODE_ORDER.map((m) => (
               <button
                 key={m}
-                onClick={() => setMode(m)}
+                onClick={() => {
+                  setMode(m);
+                  if (m !== "traditional") setMetric("gex");
+                }}
                 className={`px-2.5 py-1 font-mono text-[0.6rem] font-semibold tracking-[0.05em] transition-colors duration-150 ${
                   m === mode ? "bg-[var(--accent)] text-[var(--bg)]" : "text-[var(--text-dim)] hover:text-[var(--text)]"
                 }`}

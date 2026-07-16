@@ -339,7 +339,7 @@ export default function TopoSurface({
   const activeMode = MODES.find((m) => m.id === modeIds[activeIdx]) ?? MODES[0];
 
   // Mutable view state shared with the imperative render loop.
-  const view = useRef({ yaw: 0.62, pitch: 0.52, dragUntil: 0, fadeT: 1, lastCycle: 0, pinnedUntil: 0 });
+  const view = useRef({ yaw: 0.62, pitch: 0.52, zoom: 1, dragUntil: 0, fadeT: 1, lastCycle: 0, pinnedUntil: 0 });
   const prevIdxRef = useRef(activeIdx);
   const stateRef = useRef({ surfaces, modeIds, modeIdx: activeIdx, palIdx, spot, controlled, tenorLabels, walls });
   useEffect(() => {
@@ -496,8 +496,8 @@ export default function TopoSurface({
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glBuf.idx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, S.glIdx, gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, glBuf.floor); gl.bufferData(gl.ARRAY_BUFFER, S.glFloor, gl.STATIC_DRAW);
       }
-      const { yaw, pitch } = view.current;
-      const scale = Math.min(W * 0.34, H * 0.58); // keep in sync with makeProject
+      const { yaw, pitch, zoom } = view.current;
+      const scale = Math.min(W * 0.34, H * 0.58) * zoom; // keep in sync with makeProject
       gl.uniform2f(glLoc.uYaw as WebGLUniformLocation, Math.cos(yaw), Math.sin(yaw));
       gl.uniform2f(glLoc.uPit as WebGLUniformLocation, Math.cos(pitch), Math.sin(pitch));
       gl.uniform2f(glLoc.uScale as WebGLUniformLocation, scale / (W / 2), scale / (H / 2));
@@ -534,10 +534,10 @@ export default function TopoSurface({
 
     /** Elevated 3/4 camera: yaw turntable, then tilt DOWN by pitch so the far edge sits higher. */
     const makeProject = (W: number, H: number) => {
-      const { yaw, pitch } = view.current;
+      const { yaw, pitch, zoom } = view.current;
       const cy = H * 0.5;
       const cx = W / 2;
-      const scale = Math.min(W * 0.34, H * 0.58);
+      const scale = Math.min(W * 0.34, H * 0.58) * zoom;
       const f = 3.8;
       const cosY = Math.cos(yaw), sinY = Math.sin(yaw), cosP = Math.cos(pitch), sinP = Math.sin(pitch);
       return (x: number, y: number, z: number) => {
@@ -782,7 +782,13 @@ export default function TopoSurface({
       const v = view.current;
       if (dragging) {
         v.yaw += (e.clientX - lx) * 0.006;
-        v.pitch = Math.max(0.15, Math.min(1.15, v.pitch + (e.clientY - ly) * 0.004));
+        // Widened from [0.15, 1.15] - that range only ever showed the
+        // terrain from a moderate-to-steep downward angle, so anything
+        // sitting behind a tall ridge (nearer the camera) stayed hidden.
+        // Down to -0.35 lets it tilt to a near-eye-level, almost-from-
+        // underneath grazing angle; up to 1.4 gets close to straight
+        // top-down.
+        v.pitch = Math.max(-0.35, Math.min(1.4, v.pitch + (e.clientY - ly) * 0.004));
         lx = e.clientX;
         ly = e.clientY;
         v.dragUntil = performance.now() + 6000;
@@ -809,10 +815,31 @@ export default function TopoSurface({
       }
     };
     const onLeave = () => setReadout("");
+    // Scroll to zoom - there was no way to get closer than the fixed
+    // default distance, which made it hard to pick out a specific strike
+    // in a dense grid. Clamped to [0.5, 2.5] so it can't zoom into
+    // nothing or out past the point the terrain becomes a speck.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const v = view.current;
+      v.zoom = Math.max(0.5, Math.min(2.5, v.zoom * (1 - Math.sign(e.deltaY) * 0.08)));
+      v.dragUntil = performance.now() + 6000;
+    };
+    // Double-click to reset the view - easy to end up zoomed in at an
+    // awkward angle with no obvious way back.
+    const onDblClick = () => {
+      const v = view.current;
+      v.yaw = 0.62;
+      v.pitch = 0.52;
+      v.zoom = 1;
+      v.dragUntil = performance.now() + 6000;
+    };
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("pointermove", onMove);
     canvas.addEventListener("pointerleave", onLeave);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("dblclick", onDblClick);
 
     return () => {
       cancelAnimationFrame(raf);
@@ -820,6 +847,8 @@ export default function TopoSurface({
       canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerleave", onLeave);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("dblclick", onDblClick);
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
     };
   }, []);
@@ -872,7 +901,7 @@ export default function TopoSurface({
         <canvas ref={glCanvasRef} className="absolute inset-0 h-full w-full" />
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing" />
       </div>
-      <p className="m-0 font-mono text-[0.6rem] leading-relaxed text-[var(--text-faint)]">{activeMode.caption} · drag to rotate · values from the source cross-expiry surfaces (raw-magnitude proxy)</p>
+      <p className="m-0 font-mono text-[0.6rem] leading-relaxed text-[var(--text-faint)]">{activeMode.caption} · drag to rotate · scroll to zoom · double-click to reset · values from the source cross-expiry surfaces (raw-magnitude proxy)</p>
     </div>
   );
 }
