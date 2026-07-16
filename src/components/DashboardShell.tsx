@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { MacroPanel } from "@/lib/macroData";
 import type { MarketRow } from "@/lib/getMarkets";
 import SeriesCard from "@/components/SeriesCard";
@@ -36,17 +37,6 @@ const REPLAY_ID = "replay";
 const FINGERPRINT_ID = "fingerprint";
 const CALENDAR_ID = "calendar";
 const DOCS_ID = "docs";
-
-// Options Flow is its own upcoming section: several pages, all clickable but
-// landing on a "coming soon" screen until the feature ships.
-const OPTIONS_FLOW_PREFIX = "options-flow";
-const OPTIONS_FLOW_PAGES = [
-  { id: "options-flow:greeks", label: "GREEKS EXPOSURE", blurb: "Dealer gamma, delta, vanna and charm, and the levels they pull price toward." },
-  { id: "options-flow:volsurface", label: "VOL SURFACE", blurb: "Implied volatility skew and term structure across strikes and expiries." },
-  { id: "options-flow:walls", label: "STRIKE WALLS", blurb: "Open interest concentrations that act as magnets and barriers into expiry." },
-  { id: "options-flow:expectedmove", label: "EXPECTED MOVE", blurb: "What the options market is pricing for the session, the week, and the next event." },
-  { id: "options-flow:pressure", label: "PUT/CALL PRESSURE", blurb: "Positioning imbalance across strikes and expiries, and which way it is leaning." },
-];
 
 const SHORT_LABEL: Record<string, string> = {
   "us-macro": "US MACRO",
@@ -196,45 +186,19 @@ function NavItem({
   );
 }
 
-/** An upcoming Options Flow page: clickable, but leads to a coming-soon screen. */
-function OptionsFlowNavItem({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
+/** Real navigation to the standalone gated /tesseract page, not an internal pickPage state switch - it's a separate server-rendered route with its own access-code check, not something to render inline here. */
+function TesseractNavItem({ isActive }: { isActive: boolean }) {
   return (
-    <button
-      onClick={onClick}
+    <Link
+      href="/tesseract"
       className={`group relative flex w-full items-center gap-3 px-4 py-[9px] text-left font-mono text-[0.7rem] tracking-wide transition-colors duration-150 ${
         isActive ? "bg-[var(--panel-2)] text-[var(--text)]" : "text-[var(--text-faint)] hover:text-[var(--text-dim)]"
       }`}
     >
       {isActive && <span className="absolute left-0 top-1/2 h-4 w-px -translate-y-1/2 bg-[var(--text)]" />}
       <PanelIcon id="options-flow" className="shrink-0" style={{ color: isActive ? "var(--text)" : "var(--text-faint)" }} />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-    </button>
-  );
-}
-
-/** Coming-soon screen for the Options Flow section. */
-function ComingSoon({ label, blurb }: { label: string; blurb: string }) {
-  return (
-    <div className="mx-auto max-w-2xl py-8">
-      <div className="hud border border-[var(--border)] bg-[var(--panel)] p-8 text-center sm:p-12">
-        <div className="partno mb-4" style={{ color: "var(--text-dim)" }}>
-          STATUS: COMING SOON
-        </div>
-        <PanelIcon id="options-flow" className="mx-auto mb-5" style={{ color: "var(--text-faint)", width: 34, height: 34 }} />
-        <h2 className="font-display m-0 text-[1.6rem] leading-tight sm:text-[2rem]">{label}</h2>
-        <p className="mx-auto mt-4 max-w-md font-sans text-[0.92rem] leading-relaxed text-[var(--text-dim)]">{blurb}</p>
-        <p className="mx-auto mt-3 max-w-md font-sans text-[0.86rem] leading-relaxed text-[var(--text-faint)]">
-          The options desk is being built out now. It is not live yet, but it is on the way. Check back soon.
-        </p>
-        <div className="mt-6 inline-flex items-center gap-2 border border-[var(--border-strong)] px-3 py-1.5 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-[var(--text-dim)]">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--amber)] opacity-60" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--amber)]" />
-          </span>
-          In development
-        </div>
-      </div>
-    </div>
+      <span className="min-w-0 flex-1 truncate">TESSERACT</span>
+    </Link>
   );
 }
 
@@ -322,9 +286,6 @@ export default function DashboardShell({
   const isFingerprint = activeId === FINGERPRINT_ID;
   const isCalendar = activeId === CALENDAR_ID;
   const isDocs = activeId === DOCS_ID;
-  const activeOptionsFlow = activeId.startsWith(`${OPTIONS_FLOW_PREFIX}:`)
-    ? OPTIONS_FLOW_PAGES.find((p) => p.id === activeId) ?? null
-    : null;
   const allSeries = panels.flatMap((p) => p.series);
   const newsSeries = allSeries.find((s) => s.id === "geo:news-feed") ?? null;
   const activeNewsSeries = newsAssetTab
@@ -394,9 +355,7 @@ export default function DashboardShell({
               ? "Calendar"
               : isDocs
                 ? "Documentation"
-                : activeOptionsFlow
-                  ? activeOptionsFlow.label
-                  : active?.title ?? "";
+                : active?.title ?? "";
 
   // Clock + settings + sign-out. Always visible (the nav scrolls internally
   // now, so this no longer sinks to the bottom of long pages like Docs) and
@@ -500,18 +459,8 @@ export default function DashboardShell({
 
             <div className="flex items-center justify-between px-4 pb-1 pt-1">
               <span className="partno">OPTIONS</span>
-              <span className="border border-[var(--border-strong)] px-1.5 py-0.5 font-mono text-[0.52rem] font-semibold uppercase tracking-[0.12em] text-[var(--amber)]">
-                Soon
-              </span>
             </div>
-            {OPTIONS_FLOW_PAGES.map((p) => (
-              <OptionsFlowNavItem
-                key={p.id}
-                label={p.label}
-                isActive={p.id === activeId}
-                onClick={() => pickPage(p.id)}
-              />
-            ))}
+            <TesseractNavItem isActive={false} />
 
             <div className="mx-4 my-2 border-t border-[var(--border)]" />
 
@@ -623,16 +572,6 @@ export default function DashboardShell({
                 </h1>
               </header>
               <RegimeFingerprintPage panels={panels} markets={markets} />
-            </>
-          ) : activeOptionsFlow ? (
-            <>
-              <header className="mb-8">
-                <div className="eyebrow mb-2">Options Flow</div>
-                <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
-                  <Scramble text={activeOptionsFlow.label} />
-                </h1>
-              </header>
-              <ComingSoon label={activeOptionsFlow.label} blurb={activeOptionsFlow.blurb} />
             </>
           ) : isCalendar ? (
             <>
