@@ -19,7 +19,14 @@ import type { TopoRow } from "@/lib/topoProfile";
 import type { WallMarker } from "@/components/optionsflow/TerminalChart";
 
 const ROWS = 16;
-const MAX_COLS = 44;
+// Matches buildTopoProfile's own default strike-window size (topoProfile.ts)
+// - subsample() below only fires when there are MORE than this, so as long
+// as the two stay in sync every fetched strike actually renders. They used
+// to disagree (44 vs 60): subsample's uniform step-and-floor picking silently
+// dropped whichever strikes didn't land on a sampled index - including
+// strikes right next to spot or a wall, since which ones get dropped is
+// just a function of array length, not of what's actually important.
+const MAX_COLS = 60;
 // Display mesh density (data grid is Catmull-Rom upsampled to this - smooth, non-polygonal).
 const DROWS = 48;
 const DCOLS_MAX = 132;
