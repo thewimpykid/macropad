@@ -1,61 +1,58 @@
 /**
- * Strike x tenor "term profile" for the Terminal's 3D topography surface -
- * per strike, each major Greek's exposure split into four expiry tenors
- * [0DTE, this-week (1-7 DTE), next-week (8-14 DTE), monthly+ (15+ DTE)].
+ * Strike x expiry "term profile" for the Terminal's 3D topography surface -
+ * per strike, each major Greek's exposure across whatever real expiry
+ * columns this fetch actually has (0DTE + next 5 - see y3osFeed.ts). No
+ * coarse time-bucketing (there used to be a fixed 0DTE/1W/2W/M+ scheme) -
+ * bucketing into "monthly+" implied a timeframe this app was never
+ * actually fetching data for, which doesn't make sense to show as if it
+ * were real.
  *
  * Built directly from the same six StrikeExpiryHeatmap grids the Terminal
  * heatmap renders (see strikeExpiryHeatmaps.ts) - one real, per-expiry
- * source for both views instead of mixing this app's self-computed 0DTE
- * chain with a raw cross-expiry proxy, which disagreed with each other and
- * with the source's own dashboard. Values are RAW, not scaled to $ - see
+ * source for both views. Values are RAW, not scaled to $ - see
  * strikeExpiryHeatmaps.ts for why.
  */
 
 import type { StrikeExpiryHeatmap, HeatmapMetric } from "@/lib/strikeExpiryHeatmaps";
 
-export type TenorArr = [number, number, number, number];
-
 export interface TopoRow {
   strike: number;
-  gex: TenorArr;
-  dex: TenorArr;
-  vanna: TenorArr;
-  charm: TenorArr;
-  theta: TenorArr;
-  vega: TenorArr;
+  gex: number[];
+  dex: number[];
+  vanna: number[];
+  charm: number[];
+  theta: number[];
+  vega: number[];
 }
 
-export const TENOR_LABELS = ["0DTE", "1W", "2W", "M+"] as const;
-
-const bucketIdx = (dte: number) => (dte <= 0 ? 0 : dte <= 7 ? 1 : dte <= 14 ? 2 : 3);
-
-function bucketGrid(grid: StrikeExpiryHeatmap | null): Map<number, TenorArr> {
-  const out = new Map<number, TenorArr>();
+function columnMap(grid: StrikeExpiryHeatmap | null): Map<number, number[]> {
+  const out = new Map<number, number[]>();
   if (!grid) return out;
   grid.strikes.forEach((strike, i) => {
-    const arr: TenorArr = [0, 0, 0, 0];
-    grid.values[i].forEach((v, ci) => {
-      if (v === null) return;
-      const dte = grid.columns[ci].dte;
-      if (dte === null || dte === undefined) return; // unknown expiry - skipping is honest; defaulting to 0 would silently inflate the 0DTE tenor
-      arr[bucketIdx(dte)] += v;
-    });
-    out.set(strike, arr);
+    out.set(strike, grid.values[i].map((v) => v ?? 0));
   });
   return out;
 }
 
 export type TopoGrids = Record<HeatmapMetric, StrikeExpiryHeatmap | null>;
 
+/** Column labels for whichever grid actually has columns (they all share the same fetch, so the same columns). */
+export function topoTenorLabels(grids: TopoGrids): string[] {
+  const grid = grids.gex ?? grids.dex ?? grids.vex ?? grids.cex ?? grids.tex ?? grids.vegaex;
+  return grid?.columns.map((c) => c.label) ?? [];
+}
+
 /** Nearest `count` strikes to spot with any grid data, ascending. */
 export function buildTopoProfile(grids: TopoGrids, spot: number, count = 60): TopoRow[] {
+  const width = topoTenorLabels(grids).length || 1;
+  const zero = () => new Array(width).fill(0);
   const maps = {
-    gex: bucketGrid(grids.gex),
-    dex: bucketGrid(grids.dex),
-    vanna: bucketGrid(grids.vex),
-    charm: bucketGrid(grids.cex),
-    theta: bucketGrid(grids.tex),
-    vega: bucketGrid(grids.vegaex),
+    gex: columnMap(grids.gex),
+    dex: columnMap(grids.dex),
+    vanna: columnMap(grids.vex),
+    charm: columnMap(grids.cex),
+    theta: columnMap(grids.tex),
+    vega: columnMap(grids.vegaex),
   };
 
   const strikes = [...new Set(Object.values(maps).flatMap((m) => [...m.keys()]))]
@@ -63,7 +60,7 @@ export function buildTopoProfile(grids: TopoGrids, spot: number, count = 60): To
     .slice(0, count)
     .sort((a, b) => a - b);
 
-  const get = (m: Map<number, TenorArr>, k: number): TenorArr => m.get(k) ?? ([0, 0, 0, 0] as TenorArr);
+  const get = (m: Map<number, number[]>, k: number): number[] => m.get(k) ?? zero();
   return strikes.map((strike) => ({
     strike,
     gex: get(maps.gex, strike),

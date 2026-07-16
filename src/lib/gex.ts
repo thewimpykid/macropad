@@ -122,8 +122,10 @@ export interface GexResponse {
   effectiveGex?: EffectiveGexResult;
   /** Strike x expiry grids for the Terminal heatmap, one per selectable Greek - see strikeExpiryHeatmaps.ts. */
   strikeExpiryHeatmaps?: Record<"gex" | "dex" | "vex" | "cex" | "tex" | "vegaex", StrikeExpiryHeatmap | null>;
-  /** Strike x tenor term profile for the Terminal's 3D topography surface - see topoProfile.ts. */
+  /** Strike x expiry term profile for the Terminal's 3D topography surface - see topoProfile.ts. */
   topo?: TopoRow[];
+  /** Column labels for `topo`'s per-strike arrays - real expiry dates, not a fixed tenor scheme. */
+  topoTenorLabels?: string[];
   /** 0DTE IV smile: each strike's real quoted call/put IV plus the session's fitted SVI curve at that strike, for the IV Smile tab. */
   ivSmile?: IvSmilePoint[];
 }

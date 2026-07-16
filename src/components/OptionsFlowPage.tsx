@@ -357,29 +357,28 @@ function TerminalView({
     return computeTopWalls(rows, "gex", 2);
   }, [data, mode]);
 
-  // TERRAIN's surface is built around the tenor axis (0DTE/1W/2W/M+) -
-  // Effective/Shadow are single 0DTE scenarios with no tenor dimension.
-  // Repurposes the first two tenor slots as the +move/-move scenarios
-  // (relabeled below) and zeroes the other two; only the GEX surface
-  // carries real data in this mode since this app doesn't compute a
-  // per-Greek scenario delta.
+  // TERRAIN's surface is built around a time/scenario axis. Traditional
+  // mode uses the real expiry columns this fetch has (0DTE + next 5 - no
+  // coarse "1W/2W/M+" bucketing implying timeframes with no actual data).
+  // Effective/Shadow are single 0DTE scenarios with a 2-slot +move/-move
+  // axis instead; only the GEX surface carries real data in this mode
+  // since this app doesn't compute a per-Greek scenario delta.
   const topoRows = useMemo(() => {
     if (mode === "traditional") return data.topo ?? [];
-    const zero: [number, number, number, number] = [0, 0, 0, 0];
     return (data.effectiveGex?.rows ?? []).map((r) => ({
       strike: r.strike,
-      gex: [mode === "effective" ? r.upEffective : r.shadowGammaUp, mode === "effective" ? r.downEffective : r.shadowGammaDown, 0, 0] as [number, number, number, number],
-      dex: zero,
-      vanna: zero,
-      charm: zero,
-      theta: zero,
-      vega: zero,
+      gex: [mode === "effective" ? r.upEffective : r.shadowGammaUp, mode === "effective" ? r.downEffective : r.shadowGammaDown],
+      dex: [0, 0],
+      vanna: [0, 0],
+      charm: [0, 0],
+      theta: [0, 0],
+      vega: [0, 0],
     }));
   }, [data, mode]);
   const topoTenorLabels =
     mode === "traditional"
-      ? undefined
-      : [`+${data.effectiveGex ? (data.effectiveGex.moveUpPct * 100).toFixed(1) : "—"}%`, `-${data.effectiveGex ? (data.effectiveGex.moveDownPct * 100).toFixed(1) : "—"}%`, "", ""];
+      ? data.topoTenorLabels
+      : [`+${data.effectiveGex ? (data.effectiveGex.moveUpPct * 100).toFixed(1) : "—"}%`, `-${data.effectiveGex ? (data.effectiveGex.moveDownPct * 100).toFixed(1) : "—"}%`];
 
   const phaseColor = gammaEngine ? PHASE_COLOR[gammaEngine.phase.phase] ?? "var(--text-faint)" : "var(--text-faint)";
 

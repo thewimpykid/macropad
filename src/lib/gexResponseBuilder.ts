@@ -9,7 +9,7 @@ import { computeThetaEngine } from "@/lib/thetaEngine";
 import { computeVannaEngine } from "@/lib/vannaEngine";
 import { computeCharmEngine } from "@/lib/charmEngine";
 import { computeEffectiveGex } from "@/lib/effectiveGexEngine";
-import { buildTopoProfile } from "@/lib/topoProfile";
+import { buildTopoProfile, topoTenorLabels } from "@/lib/topoProfile";
 import { buildY3osHeatmapGrids, type ColumnBook, type Y3Core } from "@/lib/y3osFeed";
 
 const EMPTY_PROBABILITY: ProbabilityStats = { muDailyPct: 0, sigmaDailyPct: 0, skewness: 0, excessKurtosis: 0, fatTails: false, nDays: 0, bands1d: {} };
@@ -177,6 +177,7 @@ export function buildGexResponse(symbol: GexSymbol, core: Y3Core, columns: Colum
   const heatmapGrids = buildY3osHeatmapGrids(columns);
   response.strikeExpiryHeatmaps = heatmapGrids;
   response.topo = buildTopoProfile(heatmapGrids, spot);
+  response.topoTenorLabels = topoTenorLabels(heatmapGrids);
 
   const sortedStrikes = [...new Set(perStrike.map((row) => row.strike))].sort((a, b) => a - b);
   const strikeGaps = sortedStrikes.slice(1).map((s, i) => s - sortedStrikes[i]).filter((g) => g > 0).sort((a, b) => a - b);

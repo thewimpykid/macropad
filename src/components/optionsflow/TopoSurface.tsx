@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TENOR_LABELS, type TopoRow } from "@/lib/topoProfile";
+import type { TopoRow } from "@/lib/topoProfile";
 
 const ROWS = 16;
 const MAX_COLS = 44;
@@ -227,11 +227,15 @@ function termSurface(profile: TopoRow[], pick: (r: TopoRow) => readonly number[]
   const rows = subsample(profile);
   if (rows.length < 5) return null;
   const cols = rows.map((r) => r.strike);
+  // Tenor count comes from the data itself (however many real expiry
+  // columns this fetch actually has - see topoProfile.ts), not a fixed 4 -
+  // there's no reason to imply timeframes beyond what was actually fetched.
+  const nTenors = Math.max(2, (pick(rows[0]) ?? []).length || 2);
   const h: number[][] = [];
   const raw: number[][] = [];
   for (let r = 0; r < ROWS; r++) {
-    const t = (r / (ROWS - 1)) * 3;
-    const i = Math.min(2, Math.floor(t));
+    const t = (r / (ROWS - 1)) * (nTenors - 1);
+    const i = Math.min(nTenors - 2, Math.floor(t));
     const f = t - i;
     // ?? [] guards a stale cached API response that predates a newly added Greek field.
     h.push(rows.map((row) => cosMix((pick(row) ?? [])[i] ?? 0, (pick(row) ?? [])[i + 1] ?? 0, f)));
@@ -278,7 +282,7 @@ export default function TopoSurface({
   rows,
   spot,
   height = 480,
-  tenorLabels = TENOR_LABELS,
+  tenorLabels = ["0DTE"],
   metric,
 }: {
   rows: TopoRow[];
@@ -647,7 +651,7 @@ export default function TopoSurface({
       ctx.textAlign = "left";
       for (const rr of [0, 5, 10, 15]) {
         const p = proj(X(CC - 1) + 0.06, floorY, Z(dispR(rr)));
-        label(st.tenorLabels[Math.round((rr / (ROWS - 1)) * 3)], p.px, p.py, pal.ink2);
+        label(st.tenorLabels[Math.round((rr / (ROWS - 1)) * Math.max(0, st.tenorLabels.length - 1))] ?? "", p.px, p.py, pal.ink2);
       }
 
       // Spot column.
@@ -783,7 +787,7 @@ export default function TopoSurface({
       }
       if (bp) {
         const val = S.raw[bp.r][bp.c];
-        setReadout(`$${S.cols[bp.c]} · ${fmtMag(val)} ${st.tenorLabels[Math.round((bp.r / (ROWS - 1)) * 3)]}`);
+        setReadout(`$${S.cols[bp.c]} · ${fmtMag(val)} ${st.tenorLabels[Math.round((bp.r / (ROWS - 1)) * Math.max(0, st.tenorLabels.length - 1))] ?? ""}`);
       } else {
         setReadout("");
       }
