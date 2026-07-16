@@ -11,5 +11,5 @@ import { getMarkets } from "@/lib/getMarkets";
 export default async function DevPreviewPage() {
   if (process.env.DEV_PREVIEW !== "1") notFound();
   const [{ panels, lastUpdated }, markets] = await Promise.all([getPanels(), getMarkets()]);
-  return <DashboardShell panels={panels} lastUpdated={lastUpdated} markets={markets} />;
+  return <DashboardShell panels={panels} lastUpdated={lastUpdated} markets={markets} tesseractAuthed={false} />;
 }

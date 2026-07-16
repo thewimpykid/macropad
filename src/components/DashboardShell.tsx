@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { MacroPanel } from "@/lib/macroData";
 import type { MarketRow } from "@/lib/getMarkets";
 import SeriesCard from "@/components/SeriesCard";
@@ -17,6 +16,8 @@ import CalendarPage from "@/components/CalendarPage";
 import BoardPage from "@/components/BoardPage";
 import TerminalPage from "@/components/TerminalPage";
 import DocumentationPage from "@/components/DocumentationPage";
+import OptionsFlowPage from "@/components/OptionsFlowPage";
+import { TesseractGate } from "@/components/TesseractGate";
 import { MARKET_SYMBOLS } from "@/lib/markets";
 import { getSignTone } from "@/lib/bias";
 import SignOutButton from "@/components/marketing/SignOutButton";
@@ -186,11 +187,11 @@ function NavItem({
   );
 }
 
-/** Real navigation to the standalone gated /tesseract page, not an internal pickPage state switch - it's a separate server-rendered route with its own access-code check, not something to render inline here. */
-function TesseractNavItem({ isActive }: { isActive: boolean }) {
+/** Tesseract nav item - a normal in-shell page like every other one (Board, Terminal, etc), driven by the same pickPage state switch. Gating happens in the content area below, not here. */
+function TesseractNavItem({ isActive, onClick }: { isActive: boolean; onClick: () => void }) {
   return (
-    <Link
-      href="/tesseract"
+    <button
+      onClick={onClick}
       className={`group relative flex w-full items-center gap-3 px-4 py-[9px] text-left font-mono text-[0.7rem] tracking-wide transition-colors duration-150 ${
         isActive ? "bg-[var(--panel-2)] text-[var(--text)]" : "text-[var(--text-faint)] hover:text-[var(--text-dim)]"
       }`}
@@ -198,18 +199,22 @@ function TesseractNavItem({ isActive }: { isActive: boolean }) {
       {isActive && <span className="absolute left-0 top-1/2 h-4 w-px -translate-y-1/2 bg-[var(--text)]" />}
       <PanelIcon id="options-flow" className="shrink-0" style={{ color: isActive ? "var(--text)" : "var(--text-faint)" }} />
       <span className="min-w-0 flex-1 truncate">TESSERACT</span>
-    </Link>
+    </button>
   );
 }
+
+const TESSERACT_ID = "tesseract";
 
 export default function DashboardShell({
   panels,
   lastUpdated,
   markets,
+  tesseractAuthed,
 }: {
   panels: MacroPanel[];
   lastUpdated: string | null;
   markets: MarketRow[];
+  tesseractAuthed: boolean;
 }) {
   const [activeId, setActiveId] = useState(BOARD_ID);
   const [navOpen, setNavOpen] = useState(false);
@@ -286,6 +291,7 @@ export default function DashboardShell({
   const isFingerprint = activeId === FINGERPRINT_ID;
   const isCalendar = activeId === CALENDAR_ID;
   const isDocs = activeId === DOCS_ID;
+  const isTesseract = activeId === TESSERACT_ID;
   const allSeries = panels.flatMap((p) => p.series);
   const newsSeries = allSeries.find((s) => s.id === "geo:news-feed") ?? null;
   const activeNewsSeries = newsAssetTab
@@ -355,7 +361,9 @@ export default function DashboardShell({
               ? "Calendar"
               : isDocs
                 ? "Documentation"
-                : active?.title ?? "";
+                : isTesseract
+                  ? "Tesseract"
+                  : active?.title ?? "";
 
   // Clock + settings + sign-out. Always visible (the nav scrolls internally
   // now, so this no longer sinks to the bottom of long pages like Docs) and
@@ -460,7 +468,7 @@ export default function DashboardShell({
             <div className="flex items-center justify-between px-4 pb-1 pt-1">
               <span className="partno">OPTIONS</span>
             </div>
-            <TesseractNavItem isActive={false} />
+            <TesseractNavItem isActive={isTesseract} onClick={() => pickPage(TESSERACT_ID)} />
 
             <div className="mx-4 my-2 border-t border-[var(--border)]" />
 
@@ -509,6 +517,20 @@ export default function DashboardShell({
               </header>
               <TerminalPage panels={panels} markets={markets} />
             </>
+          ) : isTesseract ? (
+            tesseractAuthed ? (
+              <OptionsFlowPage view="terminal" />
+            ) : (
+              <>
+                <header className="mb-6">
+                  <div className="eyebrow mb-2">Options Flow</div>
+                  <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
+                    <Scramble text="Tesseract" />
+                  </h1>
+                </header>
+                <TesseractGate />
+              </>
+            )
           ) : isNews ? (
             <>
               <header className="mb-6">
