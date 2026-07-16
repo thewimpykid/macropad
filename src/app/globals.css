@@ -338,6 +338,67 @@ body {
   transform: none;
 }
 
+/* Live-feed pulse — the one dot that means "receiving". */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.live-dot {
+  animation: live-pulse 2s var(--ease-in-out) infinite;
+}
+
+/* Spot tick flash — re-triggered by keying the element on update time. */
+@keyframes tick-up-flash {
+  0% {
+    color: var(--up);
+  }
+  100% {
+    color: var(--text);
+  }
+}
+@keyframes tick-down-flash {
+  0% {
+    color: var(--down);
+  }
+  100% {
+    color: var(--text);
+  }
+}
+.tick-up {
+  animation: tick-up-flash 900ms var(--ease-out) both;
+}
+.tick-down {
+  animation: tick-down-flash 900ms var(--ease-out) both;
+}
+
+/* Deep-sync shimmer — a hairline scan across a placeholder block, not a glossy skeleton. */
+@keyframes shimmer-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 6%, transparent), transparent);
+  animation: shimmer-sweep 1.6s var(--ease-in-out) infinite;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }

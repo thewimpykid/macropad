@@ -1,0 +1,280 @@
+"use client";
+
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
+import { fmtNum, fmtUsd } from "@/lib/gex";
+
+export interface TerminalMetricPoint {
+  strike: number;
+  value: number;
+}
+
+export interface WallMarker {
+  label: string;
+  price: number;
+  color: string;
+}
+
+/** Actual walls: the strikes carrying the largest exposure for the selected Greek, ranked, split by side. Positive-side strikes are dealer-sign-convention "call-like" for every Greek except DEX (which keeps its own natural, unflipped delta sign - see gex.ts), so DEX gets Long/Short labels instead of Call/Put. */
+export function computeTopWalls(rows: TerminalMetricPoint[], metric: string, count = 2): WallMarker[] {
+  const posLabel = metric === "dex" ? "Long Wall" : "Call Wall";
+  const negLabel = metric === "dex" ? "Short Wall" : "Put Wall";
+  const positives = [...rows].filter((r) => r.value > 0).sort((a, b) => b.value - a.value).slice(0, count);
+  const negatives = [...rows].filter((r) => r.value < 0).sort((a, b) => a.value - b.value).slice(0, count);
+  return [
+    ...positives.map((r, i) => ({ label: i === 0 ? posLabel : `${posLabel} #${i + 1}`, price: r.strike, color: "var(--up)" })),
+    ...negatives.map((r, i) => ({ label: i === 0 ? negLabel : `${negLabel} #${i + 1}`, price: r.strike, color: "var(--down)" })),
+  ];
+}
+
+/** Horizontal diverging bar chart - strike on the Y axis, exposure on the X axis - matching a classic options-terminal gamma profile. Optional wall/pain/flip reference lines snap to the nearest strike actually present in the data (a category axis can only draw a line exactly on one of its ticks). */
+export function TerminalExposureChart({
+  data,
+  unitLabel,
+  spot,
+  walls,
+  height = 420,
+  showAllTicks = false,
+  valueFormatter = fmtUsd,
+}: {
+  data: TerminalMetricPoint[];
+  unitLabel: string;
+  spot: number;
+  walls?: WallMarker[];
+  height?: number;
+  showAllTicks?: boolean;
+  /** Defaults to $-formatted (this app's own self-computed exposure is real dollars); pass fmtRaw for /heatmap-sourced values, which are a raw magnitude proxy, not dollars. */
+  valueFormatter?: (n: number | null | undefined) => string;
+}) {
+  const sorted = [...data].sort((a, b) => b.strike - a.strike);
+  const nearestIdx = sorted.reduce((best, d, i) => (Math.abs(d.strike - spot) < Math.abs(sorted[best].strike - spot) ? i : best), 0);
+
+  const wallLines = (walls ?? [])
+    .map((w) => {
+      const nearest = sorted.reduce((best, d) => (Math.abs(d.strike - w.price) < Math.abs(best.strike - w.price) ? d : best), sorted[0]);
+      return nearest ? { ...w, snappedStrike: nearest.strike } : null;
+    })
+    .filter((w): w is WallMarker & { snappedStrike: number } => w !== null);
+
+  return (
+    <div className="w-full" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 90, bottom: 4, left: 0 }} barCategoryGap="15%">
+          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" horizontal={false} />
+          <XAxis type="number" tick={{ fill: "var(--text-faint)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => valueFormatter(Number(v))} />
+          <YAxis
+            type="category"
+            dataKey="strike"
+            tick={{ fill: "var(--text-faint)", fontSize: 10 }}
+            tickLine={false}
+            axisLine={false}
+            width={58}
+            interval={showAllTicks ? 0 : Math.max(0, Math.floor(sorted.length / 20))}
+          />
+          <ReferenceLine x={0} stroke="var(--border-strong)" />
+          {sorted[nearestIdx] && (
+            <ReferenceLine
+              y={sorted[nearestIdx].strike}
+              stroke="var(--text)"
+              strokeDasharray="2 2"
+              label={{ value: `Spot ${fmtNum(spot, 2)}`, position: "right", fill: "var(--text)", fontSize: 10 }}
+            />
+          )}
+          {wallLines.map((w) => (
+            <ReferenceLine
+              key={w.label}
+              y={w.snappedStrike}
+              stroke={w.color}
+              strokeDasharray="4 3"
+              label={{ value: `${w.label} ${fmtNum(w.price, 2)}`, position: "right", fill: w.color, fontSize: 10 }}
+            />
+          ))}
+          <Tooltip
+            cursor={{ fill: "var(--panel-2)", opacity: 0.5 }}
+            contentStyle={{ background: "var(--panel)", border: "1px solid var(--border-strong)", borderRadius: 3, fontSize: 11 }}
+            labelFormatter={(s) => `Strike ${s}`}
+            formatter={(v) => [`${valueFormatter(Number(v))} ${unitLabel}`, unitLabel]}
+          />
+          <Bar dataKey="value" isAnimationActive={false} radius={[2, 2, 2, 2]}>
+            {sorted.map((d, i) => (
+              <Cell key={i} fill={d.value >= 0 ? "var(--up)" : "var(--down)"} stroke={i === nearestIdx ? "var(--text)" : undefined} strokeWidth={i === nearestIdx ? 1 : 0} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export interface DualBarPoint {
+  strike: number;
+  up: number;
+  down: number;
+}
+
+/** "Both" view - up-move and down-move scenario bars side by side per strike, so the two directions can be compared at a glance instead of toggling between them. */
+export function TerminalDualBarChart({
+  data,
+  unitLabel,
+  spot,
+  walls,
+  height = 420,
+  showAllTicks = false,
+  valueFormatter = fmtUsd,
+}: {
+  data: DualBarPoint[];
+  unitLabel: string;
+  spot: number;
+  walls?: WallMarker[];
+  height?: number;
+  showAllTicks?: boolean;
+  valueFormatter?: (n: number | null | undefined) => string;
+}) {
+  const sorted = [...data].sort((a, b) => b.strike - a.strike);
+  const nearestIdx = sorted.reduce((best, d, i) => (Math.abs(d.strike - spot) < Math.abs(sorted[best].strike - spot) ? i : best), 0);
+
+  const wallLines = (walls ?? [])
+    .map((w) => {
+      const nearest = sorted.reduce((best, d) => (Math.abs(d.strike - w.price) < Math.abs(best.strike - w.price) ? d : best), sorted[0]);
+      return nearest ? { ...w, snappedStrike: nearest.strike } : null;
+    })
+    .filter((w): w is WallMarker & { snappedStrike: number } => w !== null);
+
+  return (
+    <div className="w-full" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 90, bottom: 4, left: 0 }} barCategoryGap="20%" barGap={1}>
+          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" horizontal={false} />
+          <XAxis type="number" tick={{ fill: "var(--text-faint)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => valueFormatter(Number(v))} />
+          <YAxis
+            type="category"
+            dataKey="strike"
+            tick={{ fill: "var(--text-faint)", fontSize: 10 }}
+            tickLine={false}
+            axisLine={false}
+            width={58}
+            interval={showAllTicks ? 0 : Math.max(0, Math.floor(sorted.length / 20))}
+          />
+          <ReferenceLine x={0} stroke="var(--border-strong)" />
+          {sorted[nearestIdx] && (
+            <ReferenceLine
+              y={sorted[nearestIdx].strike}
+              stroke="var(--text)"
+              strokeDasharray="2 2"
+              label={{ value: `Spot ${fmtNum(spot, 2)}`, position: "right", fill: "var(--text)", fontSize: 10 }}
+            />
+          )}
+          {wallLines.map((w) => (
+            <ReferenceLine
+              key={w.label}
+              y={w.snappedStrike}
+              stroke={w.color}
+              strokeDasharray="4 3"
+              label={{ value: `${w.label} ${fmtNum(w.price, 2)}`, position: "right", fill: w.color, fontSize: 10 }}
+            />
+          ))}
+          <Tooltip
+            cursor={{ fill: "var(--panel-2)", opacity: 0.5 }}
+            contentStyle={{ background: "var(--panel)", border: "1px solid var(--border-strong)", borderRadius: 3, fontSize: 11 }}
+            labelFormatter={(s) => `Strike ${s}`}
+            formatter={(v, name) => [`${valueFormatter(Number(v))} ${unitLabel}`, name === "up" ? "+move" : "-move"]}
+          />
+          <Bar dataKey="up" isAnimationActive={false} radius={[2, 2, 2, 2]}>
+            {sorted.map((d, i) => (
+              <Cell key={i} fill="var(--up)" stroke={i === nearestIdx ? "var(--text)" : undefined} strokeWidth={i === nearestIdx ? 1 : 0} />
+            ))}
+          </Bar>
+          <Bar dataKey="down" isAnimationActive={false} radius={[2, 2, 2, 2]}>
+            {sorted.map((d, i) => (
+              <Cell key={i} fill="var(--down)" stroke={i === nearestIdx ? "var(--text)" : undefined} strokeWidth={i === nearestIdx ? 1 : 0} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function divergingColor(value: number, maxAbs: number): string {
+  if (maxAbs <= 0) return "var(--panel-2)";
+  const t = Math.max(-1, Math.min(1, value / maxAbs));
+  const pct = Math.round(Math.pow(Math.abs(t), 0.6) * 85);
+  const base = t >= 0 ? "var(--up)" : "var(--down)";
+  return `color-mix(in srgb, ${base} ${pct}%, var(--panel-2) ${100 - pct}%)`;
+}
+
+export interface StrikeExpiryHeatmapData {
+  columns: { label: string; dte: number | null }[];
+  strikes: number[];
+  values: (number | null)[][];
+}
+
+/** Strike x expiry grid for one selected Greek: rows are strikes (highest at top), columns are expirations, cell color diverges call-green/put-pink by magnitude. Overlays dashed reference lines for the walls/flip passed in. */
+export function StrikeExpiryHeatmapChart({
+  grid,
+  spot,
+  walls,
+  unitLabel,
+  valueFormatter = fmtUsd,
+}: {
+  grid: StrikeExpiryHeatmapData | null;
+  spot: number;
+  walls: WallMarker[];
+  unitLabel: string;
+  /** Defaults to $-formatted; pass fmtRaw when the grid comes from /heatmap - see TerminalExposureChart. */
+  valueFormatter?: (n: number | null | undefined) => string;
+}) {
+  if (!grid || !grid.strikes.length) return <p className="m-0 py-12 text-center font-mono text-[0.75rem] text-[var(--text-faint)]">No cross-expiry data this request.</p>;
+
+  const rows = [...grid.strikes].map((strike, i) => ({ strike, cells: grid.values[i] })).sort((a, b) => b.strike - a.strike);
+  const maxAbs = Math.max(1, ...rows.flatMap((r) => r.cells.filter((c): c is number => c !== null).map((c) => Math.abs(c))));
+  const spotRowIdx = rows.reduce((best, r, i) => (Math.abs(r.strike - spot) < Math.abs(rows[best].strike - spot) ? i : best), 0);
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-1 flex-col gap-px overflow-x-auto">
+        {rows.map((row, rowIdx) => {
+          const wall = walls.find((w) => Math.abs(w.price - row.strike) < (rows[0].strike - rows[Math.min(rows.length - 1, 1)].strike || 1) / 2);
+          return (
+            <div key={row.strike} className="relative flex items-stretch gap-px">
+              <div className="flex w-14 shrink-0 items-center justify-end pr-2 font-mono text-[0.62rem] text-[var(--text-faint)]" style={{ fontWeight: rowIdx === spotRowIdx ? 700 : 400, color: rowIdx === spotRowIdx ? "var(--text)" : undefined }}>
+                ${fmtNum(row.strike, 0)}
+              </div>
+              <div className="flex flex-1 gap-px">
+                {row.cells.map((c, colIdx) => (
+                  <div
+                    key={colIdx}
+                    title={c !== null ? `${row.strike} @ ${grid.columns[colIdx].label}: ${valueFormatter(c)} ${unitLabel}` : "—"}
+                    className="flex h-6 flex-1 items-center justify-center font-mono text-[0.6rem] font-semibold"
+                    style={{ background: c !== null ? divergingColor(c, maxAbs) : "var(--panel-2)", color: "rgba(255,255,255,0.92)" }}
+                  >
+                    {c !== null ? valueFormatter(c) : ""}
+                  </div>
+                ))}
+              </div>
+              {rowIdx === spotRowIdx && <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-[var(--text)]" />}
+              {wall && (
+                <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed" style={{ borderColor: wall.color }}>
+                  <span className="absolute right-0 -translate-y-1/2 rounded-[2px] border px-1.5 py-0.5 font-mono text-[0.56rem] font-semibold" style={{ borderColor: wall.color, color: wall.color, background: "var(--panel)" }}>
+                    {wall.label} {fmtNum(wall.price, 2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div className="flex gap-px pl-14">
+          {grid.columns.map((c, i) => (
+            <div key={i} className="flex-1 text-center font-mono text-[0.56rem] text-[var(--text-faint)]">
+              {c.label}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex w-6 shrink-0 flex-col items-center gap-1">
+        <span className="font-mono text-[0.5rem] text-[var(--text-faint)]">MAX</span>
+        <div className="w-2 flex-1 rounded-[2px]" style={{ background: "linear-gradient(to bottom, var(--up), var(--panel-2), var(--down))" }} />
+        <span className="font-mono text-[0.5rem] text-[var(--text-faint)]">MAX</span>
+      </div>
+    </div>
+  );
+}
