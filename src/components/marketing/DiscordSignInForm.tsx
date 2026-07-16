@@ -19,21 +19,35 @@ function DiscordIcon() {
   );
 }
 
+function readCookie(name: string): string {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 export default function DiscordSignInForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/app";
   const errorCode = searchParams.get("error");
   const [pending, setPending] = useState(false);
+  // A referral link can land on any page (proxy.ts stashes it in a cookie
+  // regardless of which one) - the URL's own ?ref= wins if present, so a
+  // link straight to /signin?ref=... still works even before that cookie
+  // effect would have run. Editable: someone who got a code verbally or
+  // from a screenshot (no link, no cookie) can still type it in by hand.
+  const [refCode, setRefCode] = useState(() => searchParams.get("ref") || readCookie("ref_code"));
 
   async function handleSignIn() {
     setPending(true);
     const supabase = createSupabaseBrowserClient();
+    const params = new URLSearchParams({ next });
+    if (refCode.trim()) params.set("ref", refCode.trim());
     await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
         // `guilds` lets the callback check server membership after auth.
         scopes: "identify guilds",
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        redirectTo: `${window.location.origin}/auth/callback?${params.toString()}`,
       },
     });
     // Browser navigates away to Discord on success, so no further state update needed here.
@@ -53,11 +67,24 @@ export default function DiscordSignInForm() {
         </p>
       )}
 
+      <div className="mt-6">
+        <label htmlFor="ref-code" className="font-mono text-[0.66rem] uppercase tracking-[0.08em] text-[var(--text-faint)]">
+          Referral code (optional)
+        </label>
+        <input
+          id="ref-code"
+          value={refCode}
+          onChange={(e) => setRefCode(e.target.value)}
+          placeholder="e.g. from a friend's link"
+          className="mt-1.5 w-full border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 font-mono text-[0.8rem] text-[var(--text)] outline-none focus:border-[var(--border-strong)]"
+        />
+      </div>
+
       <button
         type="button"
         onClick={handleSignIn}
         disabled={pending}
-        className="btn btn-primary mt-8 flex w-full items-center justify-center gap-2 disabled:opacity-50"
+        className="btn btn-primary mt-4 flex w-full items-center justify-center gap-2 disabled:opacity-50"
       >
         <DiscordIcon />
         {pending ? "Redirecting…" : "Continue with Discord"}

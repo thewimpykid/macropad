@@ -48,6 +48,15 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Referral capture: a link can point at any page (home, /app, /signin),
+  // not just the sign-in form, so this is caught here rather than on one
+  // specific route. Cookie only - never gates anything, just remembered
+  // until the user actually signs in (see /auth/callback).
+  const ref = request.nextUrl.searchParams.get("ref");
+  if (ref) {
+    response.cookies.set("ref_code", ref.slice(0, 64), { maxAge: 60 * 60 * 24 * 30, path: "/", sameSite: "lax" });
+  }
+
   return response;
 }
 

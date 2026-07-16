@@ -31,3 +31,27 @@ alter table macro_series add column if not exists window_label text;
 alter table macro_series add column if not exists history jsonb;
 alter table macro_series add column if not exists extra_stats jsonb;
 alter table macro_series add column if not exists payload jsonb;
+
+-- Referral tracking: one row per successful sign-in that arrived with a
+-- referral code (URL ?ref=CODE, carried through the Discord OAuth round
+-- trip, or typed into the optional field on /signin). Never gates sign-in -
+-- purely a side-effect insert after auth succeeds. No on-site leaderboard;
+-- read directly in the Supabase SQL editor/table view:
+--   select code, count(*) from referrals group by code order by count(*) desc;
+create table if not exists referrals (
+  id uuid primary key default gen_random_uuid(),
+  code text not null,
+  -- One credited referral per user, ever - unique so a later login (with or
+  -- without a ref code) never re-credits someone who already came in
+  -- through a link once.
+  user_id uuid not null unique,
+  discord_username text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists referrals_code_idx on referrals (code);
+
+alter table referrals enable row level security;
+
+drop policy if exists "public read" on referrals;
+revoke all on referrals from anon, authenticated;

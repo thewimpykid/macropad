@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabaseServer";
 
 /**
  * Landing spot for the Discord OAuth PKCE redirect. Exchanges the code for a
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
   const rawNext = searchParams.get("next") ?? "/app";
   const isSafe = rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\");
   const next = isSafe ? rawNext : "/app";
+  const refCode = searchParams.get("ref")?.trim().slice(0, 64) || null;
 
   if (code) {
     const supabase = await createSupabaseServerClient();
@@ -36,6 +38,26 @@ export async function GET(request: NextRequest) {
         if (membership === "not-a-member") {
           await supabase.auth.signOut();
           return NextResponse.redirect(`${origin}/signin?error=not_in_server`);
+        }
+      }
+
+      // Referral credit - awaited so it actually completes before this
+      // function returns (a fire-and-forget promise can get cut off when a
+      // serverless invocation ends), but never blocks or fails sign-in
+      // itself. Only recorded once per user (unique user_id), so
+      // re-logging in later (with or without a ref param) can't
+      // double-credit a code.
+      if (refCode && data.session?.user && supabaseAdmin) {
+        const user = data.session.user;
+        const discordUsername = (user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.user_metadata?.custom_claims?.global_name ?? null) as string | null;
+        try {
+          // supabase-js resolves (doesn't throw) on a DB-level error like a
+          // unique-violation on repeat login - the catch below is only for
+          // a genuine network/client failure. Either way the result is
+          // deliberately not inspected: this must never affect sign-in.
+          await supabaseAdmin.from("referrals").insert({ code: refCode, user_id: user.id, discord_username: discordUsername });
+        } catch {
+          // network hiccup or table not migrated yet - not fatal to sign-in
         }
       }
 
