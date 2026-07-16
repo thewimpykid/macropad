@@ -581,7 +581,7 @@ function TerminalView({
                   : `${data.symbol} · scenario reprice as relief — GEX only, other Greeks are flat in this mode`}
               </span>
             </div>
-            <TopoSurface rows={topoRows} spot={data.spot} tenorLabels={topoTenorLabels} metric={mode === "traditional" ? metric : "gex"} height={430} />
+            <TopoSurface rows={topoRows} spot={data.spot} tenorLabels={topoTenorLabels} metric={mode === "traditional" ? metric : "gex"} walls={walls} height={430} />
           </div>
         ) : (
           <DeepSyncPanel title="Terrain" note="the 3D relief is built from the full strike × expiry payload" />

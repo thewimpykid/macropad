@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TopoRow } from "@/lib/topoProfile";
+import type { WallMarker } from "@/components/optionsflow/TerminalChart";
 
 const ROWS = 16;
 const MAX_COLS = 44;
@@ -284,6 +285,7 @@ export default function TopoSurface({
   height = 480,
   tenorLabels = ["0DTE"],
   metric,
+  walls,
 }: {
   rows: TopoRow[];
   spot: number;
@@ -291,6 +293,8 @@ export default function TopoSurface({
   tenorLabels?: readonly string[];
   /** When set, the page's global Greek selector drives the surface: the internal metric tabs hide and auto-cycling stops. */
   metric?: TopoModeId;
+  /** The actual computed Call/Put Wall (same computeTopWalls the Chart/Heatmap use, on the 0DTE column) - marked explicitly instead of relying on "whichever bump happens to be tallest across all 6 expiries", which can (and did) point at a different strike/expiry than the real wall. */
+  walls?: WallMarker[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -332,15 +336,15 @@ export default function TopoSurface({
   // Mutable view state shared with the imperative render loop.
   const view = useRef({ yaw: 0.62, pitch: 0.52, dragUntil: 0, fadeT: 1, lastCycle: 0, pinnedUntil: 0 });
   const prevIdxRef = useRef(activeIdx);
-  const stateRef = useRef({ surfaces, modeIds, modeIdx: activeIdx, palIdx, spot, controlled, tenorLabels });
+  const stateRef = useRef({ surfaces, modeIds, modeIdx: activeIdx, palIdx, spot, controlled, tenorLabels, walls });
   useEffect(() => {
     // Snapshot the latest render values for the rAF loop - ref writes belong in effects, not render.
     if (prevIdxRef.current !== activeIdx) {
       prevIdxRef.current = activeIdx;
       view.current.fadeT = 0; // crossfade when the external selector switches the surface
     }
-    stateRef.current = { surfaces, modeIds, modeIdx: activeIdx, palIdx, spot, controlled, tenorLabels };
-  }, [surfaces, modeIds, activeIdx, palIdx, spot, controlled, tenorLabels]);
+    stateRef.current = { surfaces, modeIds, modeIdx: activeIdx, palIdx, spot, controlled, tenorLabels, walls };
+  }, [surfaces, modeIds, activeIdx, palIdx, spot, controlled, tenorLabels, walls]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -675,31 +679,32 @@ export default function TopoSurface({
         label(`SPOT ${st.spot.toFixed(0)}`, top.px, top.py - 18, pal.accent);
       }
 
-      // Auto-labelled peaks: the 2 strongest columns, named on the summit.
-      const colPeak = S.cols.map((_, c) => {
-        let v = 0;
-        for (let r = 0; r < ROWS; r++) if (Math.abs(S.h[r][c]) > Math.abs(v)) v = S.h[r][c];
-        return v;
-      });
-      // Keep labels clear of the SPOT tag (≥5 columns away) and of each other (≥8).
-      const ranked = colPeak
-        .map((v, c) => ({ v, c }))
-        .filter((x) => Math.abs(x.v) > 0.45 && Math.abs(x.c - spotCol) > 5)
-        .sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
-      const chosen: { v: number; c: number }[] = [];
-      for (const cand of ranked) {
-        if (chosen.length >= 2) break;
-        if (chosen.every((x) => Math.abs(x.c - cand.c) >= 8)) chosen.push(cand);
-      }
-      ctx.font = `600 10px ${monoFam}`;
-      ctx.textAlign = "center";
-      for (const pk of chosen) {
-        let bestR = 0;
-        for (let r = 0; r < ROWS; r++) if (Math.abs(S.h[r][pk.c]) > Math.abs(S.h[bestR][pk.c])) bestR = r;
-        const p = P[Math.round(dispR(bestR))][Math.round(dispC(pk.c))];
-        // Ink + halo, not pole-colored: on the full-spectrum surface a colored tag gets lost.
-        const tags = MODES.find((m) => m.id === modeId);
-        label(`${S.cols[pk.c]} ${pk.v >= 0 ? tags?.posTag ?? "CALL" : tags?.negTag ?? "PUT"}`, p.px, p.py - 8, pal.ink);
+      // Real wall markers - the same computeTopWalls result the Chart/Heatmap
+      // show, not an ad-hoc "tallest bump anywhere on the surface" guess. The
+      // old approach scanned every tenor row for the single biggest |value|
+      // and could (and did) land on a completely different strike, or even a
+      // different expiry column, than the actual Call/Put Wall shown
+      // everywhere else in the app - this instead marks each wall's own
+      // strike explicitly, at the front (0DTE) row where the wall is defined.
+      for (const w of st.walls ?? []) {
+        let wc = -1;
+        let wBest = Infinity;
+        S.cols.forEach((k, i) => {
+          const dd = Math.abs(k - w.price);
+          if (dd < wBest) { wBest = dd; wc = i; }
+        });
+        if (wc < 0) continue;
+        const dc = Math.round(dispC(wc));
+        const top = P[RR - 1][dc];
+        const bot = proj(X(dc), floorY, Z(0));
+        ctx.strokeStyle = w.color;
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath(); ctx.moveTo(bot.px, bot.py); ctx.lineTo(top.px, top.py - 12); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = `600 9px ${monoFam}`;
+        ctx.textAlign = "center";
+        label(`${w.label.toUpperCase()} ${w.price.toFixed(0)}`, top.px, top.py - 16, w.color);
       }
 
       // Legend: heat ramp + value scale, bottom-left (opaque backing so terrain labels can never collide with it).
