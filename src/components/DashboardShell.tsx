@@ -17,7 +17,6 @@ import BoardPage from "@/components/BoardPage";
 import TerminalPage from "@/components/TerminalPage";
 import DocumentationPage from "@/components/DocumentationPage";
 import OptionsFlowPage from "@/components/OptionsFlowPage";
-import { TesseractGate } from "@/components/TesseractGate";
 import { MARKET_SYMBOLS } from "@/lib/markets";
 import { getSignTone } from "@/lib/bias";
 import SignOutButton from "@/components/marketing/SignOutButton";
@@ -209,12 +208,10 @@ export default function DashboardShell({
   panels,
   lastUpdated,
   markets,
-  tesseractAuthed,
 }: {
   panels: MacroPanel[];
   lastUpdated: string | null;
   markets: MarketRow[];
-  tesseractAuthed: boolean;
 }) {
   const [activeId, setActiveId] = useState(BOARD_ID);
   const [navOpen, setNavOpen] = useState(false);
@@ -518,19 +515,7 @@ export default function DashboardShell({
               <TerminalPage panels={panels} markets={markets} />
             </>
           ) : isTesseract ? (
-            tesseractAuthed ? (
-              <OptionsFlowPage view="terminal" />
-            ) : (
-              <>
-                <header className="mb-6">
-                  <div className="eyebrow mb-2">Options Flow</div>
-                  <h1 className="font-display m-0 text-balance text-[2rem] leading-none sm:text-[2.6rem]">
-                    <Scramble text="Tesseract" />
-                  </h1>
-                </header>
-                <TesseractGate />
-              </>
-            )
+            <OptionsFlowPage view="terminal" />
           ) : isNews ? (
             <>
               <header className="mb-6">

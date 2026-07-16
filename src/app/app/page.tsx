@@ -1,9 +1,7 @@
 import { after } from "next/server";
-import { cookies } from "next/headers";
 import DashboardShell from "@/components/DashboardShell";
 import { getPanels } from "@/lib/getPanels";
 import { getMarkets } from "@/lib/getMarkets";
-import { isAuthedCookie, TESS_COOKIE } from "@/lib/tesseractAuth";
 
 // Rendered fresh on every request - ISR kept serving a stale cached shell
 // after deploys (users saw the old UI until the hour-long revalidate window
@@ -26,8 +24,7 @@ function refreshUrl(): string {
  * /app, the pipeline runs at most ~hourly, same cadence as the cron.
  */
 export default async function AppPage() {
-  const [{ panels, lastUpdated }, markets, cookieStore] = await Promise.all([getPanels(), getMarkets(), cookies()]);
-  const tesseractAuthed = isAuthedCookie(cookieStore.get(TESS_COOKIE)?.value);
+  const [{ panels, lastUpdated }, markets] = await Promise.all([getPanels(), getMarkets()]);
 
   const isStale = !lastUpdated || Date.now() - new Date(lastUpdated).getTime() > STALE_MS;
   if (isStale && process.env.CRON_SECRET) {
@@ -43,5 +40,5 @@ export default async function AppPage() {
     });
   }
 
-  return <DashboardShell panels={panels} lastUpdated={lastUpdated} markets={markets} tesseractAuthed={tesseractAuthed} />;
+  return <DashboardShell panels={panels} lastUpdated={lastUpdated} markets={markets} />;
 }

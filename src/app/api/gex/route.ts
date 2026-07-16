@@ -1,8 +1,8 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import type { GexSymbol } from "@/lib/gex";
 import { getSnapshot, refreshSnapshotStep } from "@/lib/gexStore";
-import { isAuthedCookie, TESS_COOKIE } from "@/lib/tesseractAuth";
 import { fetchYahooPrice } from "@/lib/yahoo";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // y3os only serves these two live - confirmed directly against the feed
 // (SPY/NDX return an explicit SYMBOL_NOT_AVAILABLE, not a silent SPX
@@ -19,10 +19,15 @@ const ALLOWED_SYMBOLS = new Set<GexSymbol>(["QQQ", "SPX"]);
 const YAHOO_SYMBOL: Record<GexSymbol, string> = { QQQ: "QQQ", SPX: "^GSPC", SPY: "SPY", NDX: "^NDX" };
 
 export async function GET(request: NextRequest) {
-  // This data only exists behind the /tesseract access-code gate - checked
-  // here too (not just on the page) so hitting this endpoint directly
-  // without the code can't bypass the gate and pull live data.
-  if (!isAuthedCookie(request.cookies.get(TESS_COOKIE)?.value)) {
+  // No more separate Tesseract access code - any signed-in (Discord/guild
+  // member) user gets this, same as every other page in /app. Checked here
+  // too (not just gating the page) so hitting this endpoint directly
+  // without a session can't pull live data either.
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
