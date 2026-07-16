@@ -125,8 +125,6 @@ const hex2rgb = (h: string): [number, number, number] => {
 const rgbStr = (c: [number, number, number] | number[], k = 1) =>
   `rgb(${Math.round(Math.min(255, Math.max(0, c[0] * k)))},${Math.round(Math.min(255, Math.max(0, c[1] * k)))},${Math.round(Math.min(255, Math.max(0, c[2] * k)))})`;
 
-const cosMix = (a: number, b: number, t: number) => a + (b - a) * (1 - Math.cos(t * Math.PI)) / 2;
-
 // Catmull-Rom spline through the data points: passes exactly through every
 // value (peaks stay peaks) but curves smoothly between them.
 const catmull = (p0: number, p1: number, p2: number, p3: number, t: number) =>
@@ -234,13 +232,20 @@ function termSurface(profile: TopoRow[], pick: (r: TopoRow) => readonly number[]
   const nTenors = Math.max(2, (pick(rows[0]) ?? []).length || 2);
   const h: number[][] = [];
   const raw: number[][] = [];
+  // Nearest-tenor step, not a smooth cosine blend between columns: the real
+  // expiries are unevenly spaced in calendar time (0/1/4/5/6/7 DTE) and this
+  // axis has no continuous "time" meaning between them, so interpolating
+  // invented a fake in-between surface that didn't correspond to any actual
+  // heatmap cell. Each display row now takes its nearest real tenor's value
+  // outright, so the terrain forms a flat terrace per expiry - node-for-node
+  // with the heatmap grid, with a clean boundary at every real column
+  // (0DTE included) instead of it blurring into its neighbor.
   for (let r = 0; r < ROWS; r++) {
     const t = (r / (ROWS - 1)) * (nTenors - 1);
-    const i = Math.min(nTenors - 2, Math.floor(t));
-    const f = t - i;
+    const i = Math.round(t);
     // ?? [] guards a stale cached API response that predates a newly added Greek field.
-    h.push(rows.map((row) => cosMix((pick(row) ?? [])[i] ?? 0, (pick(row) ?? [])[i + 1] ?? 0, f)));
-    raw.push(rows.map((row) => (pick(row) ?? [])[Math.round(t)] ?? 0));
+    h.push(rows.map((row) => (pick(row) ?? [])[i] ?? 0));
+    raw.push(rows.map((row) => (pick(row) ?? [])[i] ?? 0));
   }
   let maxAbs = 0;
   for (const row of h) for (const v of row) maxAbs = Math.max(maxAbs, Math.abs(v));
@@ -653,9 +658,15 @@ export default function TopoSurface({
         label(String(k), p2.px, p2.py + 10, pal.ink3);
       }
       ctx.textAlign = "left";
-      for (const rr of [0, 5, 10, 15]) {
+      // One tick per REAL tenor column (0DTE included), not 4 evenly-spaced
+      // samples along ROWS - with 6 real expiries and only 4 fixed sample
+      // points, 2 of them (including sometimes 0DTE itself) never got a
+      // label at all.
+      const nLabels = Math.max(1, st.tenorLabels.length);
+      for (let li = 0; li < nLabels; li++) {
+        const rr = Math.round((li / Math.max(1, nLabels - 1)) * (ROWS - 1));
         const p = proj(X(CC - 1) + 0.06, floorY, Z(dispR(rr)));
-        label(st.tenorLabels[Math.round((rr / (ROWS - 1)) * Math.max(0, st.tenorLabels.length - 1))] ?? "", p.px, p.py, pal.ink2);
+        label(st.tenorLabels[li] ?? "", p.px, p.py, pal.ink2);
       }
 
       // Spot column.
