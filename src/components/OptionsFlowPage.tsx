@@ -249,7 +249,7 @@ function TerminalView({
   const [mode, setMode] = useState<ChartMode>("traditional");
   // The per-strike panel offers both forms: the spine (this terminal's own
   // mirrored-terrain read) and the industry-standard diverging bars.
-  const [strikeView, setStrikeView] = useState<"spine" | "bars">("bars");
+  const [strikeView, setStrikeView] = useState<"spine" | "bars">("spine");
   const [effectiveDir, setEffectiveDir] = useState<"up" | "down" | "both">("up");
   const [chartDteIndex, setChartDteIndex] = useState(0);
   const [dteScope, setDteScope] = useState<"single" | "cumulative">("single");
