@@ -3,6 +3,7 @@ import type { GexSymbol } from "@/lib/gex";
 import { getSnapshot, refreshSnapshotStep } from "@/lib/gexStore";
 import { fetchYahooPrice } from "@/lib/yahoo";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { hasFounderKey, isSiteRequest } from "@/lib/apiAccess";
 
 // y3os only serves these two live - confirmed directly against the feed
 // (SPY/NDX return an explicit SYMBOL_NOT_AVAILABLE, not a silent SPX
@@ -22,13 +23,23 @@ export async function GET(request: NextRequest) {
   // No more separate Tesseract access code - any signed-in (Discord/guild
   // member) user gets this, same as every other page in /app. Checked here
   // too (not just gating the page) so hitting this endpoint directly
-  // without a session can't pull live data either.
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  // without a session can't pull live data either. On top of the session,
+  // the fetch must come from the site's own pages (isSiteRequest): the JSON
+  // is for the dashboard to render, not for signed-in users to pipe into
+  // their own programs. Founders bypass both with the x-api-key header
+  // (never shipped to clients). DEV_PREVIEW is the local design-review
+  // escape hatch (/dev-preview has no session to send); never set in prod.
+  if (process.env.DEV_PREVIEW !== "1" && !hasFounderKey(request)) {
+    if (!isSiteRequest(request)) {
+      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    }
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    }
   }
 
   const symbol = request.nextUrl.searchParams.get("symbol")?.toUpperCase() as GexSymbol | undefined;
