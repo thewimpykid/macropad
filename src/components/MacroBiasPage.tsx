@@ -69,6 +69,11 @@ export default function MacroBiasPage({ panels }: { panels: MacroPanel[] }) {
           - and weight growth, inflation, and credit up instead. None of this is user-adjustable. Positive =
           risk-on, negative = risk-off.
         </p>
+        <p className="mt-2 font-sans text-[0.72rem] leading-relaxed text-[var(--text-faint)]">
+          The bias reads standing conditions only. Geopolitical shocks, sudden headlines, and other event risk sit
+          outside every input here and can drastically move outcomes without warning - treat any reading, however
+          strong, as a lean under normal conditions rather than a guarantee.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
