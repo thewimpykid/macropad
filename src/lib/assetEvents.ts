@@ -17,7 +17,7 @@ export interface IndicatorRow {
 export interface AssetEvent {
   title: string;
   link: string | null;
-  pubDate: string;
+  pubDate: string | null;
   source: string;
   sentimentScore: number;
   sentimentLabel: "bullish" | "bearish" | "neutral";
@@ -67,7 +67,10 @@ export function buildAssetIndicatorEvents(symbol: string, rows: IndicatorRow[]):
     const row = rowById.get(seriesId);
     if (!row || row.zscore === null) continue;
 
-    const latestDate = row.history?.length ? row.history[row.history.length - 1].date : new Date().toISOString();
+    // Null, never "now", when the indicator has no history to date it to - a
+    // fabricated current timestamp would sort this event to the top of the
+    // asset feed and hand it maximum recency weight in the sentiment average.
+    const latestDate = row.history?.length ? row.history[row.history.length - 1].date : null;
     const currentScore = clamp(row.zscore * impact.sign);
     events.push({
       title: `${row.name}: ${row.value}`,

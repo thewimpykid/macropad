@@ -82,6 +82,15 @@ export interface GexResponse {
   ok: boolean;
   symbol: GexSymbol;
   asOf: number;
+  /**
+   * The served snapshot is no longer trustworthy as "live" - either the front
+   * book hasn't refreshed in far longer than the poll cadence, or its 0DTE
+   * expiry has already passed. Set by gexStore on the way out (the cached
+   * `data` blob itself is written once and can't know how old it has become),
+   * so the UI can say so instead of showing a green LIVE dot over a book from
+   * a previous session.
+   */
+  stale?: boolean;
   spot: number;
   /** The actual date (YYYY-MM-DD) the 0DTE column was read from. */
   resolvedExpiry: string;

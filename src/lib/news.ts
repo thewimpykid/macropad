@@ -80,7 +80,7 @@ function isAssetRelevant(item: RssItem, symbol: string): boolean {
 export interface NewsItem {
   title: string;
   link: string | null;
-  pubDate: string; // ISO
+  pubDate: string | null; // ISO, or null when the feed gave no date - never fabricated as "now"
   source: string; // which desk it came from
   sentimentScore: number; // -1..1
   sentimentLabel: "bullish" | "bearish" | "neutral";
@@ -112,7 +112,12 @@ function mergeAndScore(results: { source: string; items: RssItem[] }[], maxItems
       merged.push({
         title: h.title,
         link: h.link,
-        pubDate: h.pubDate ?? new Date().toISOString(),
+        // Never fabricate a date. An undated headline used to be stamped
+        // "now", which shot it to the top of the feed AND gave it maximum
+        // weight in the recency-weighted sentiment score - a single stale
+        // undated item could then dominate the live read. Left null instead:
+        // sorted last, minimum weight, rendered as "undated".
+        pubDate: h.pubDate ?? null,
         source,
         sentimentScore: sentiment.score,
         sentimentLabel: sentiment.label,
@@ -120,7 +125,8 @@ function mergeAndScore(results: { source: string; items: RssItem[] }[], maxItems
     }
   }
 
-  merged.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+  // Dated newest-first; undated (null) always last.
+  merged.sort((a, b) => (b.pubDate ? new Date(b.pubDate).getTime() : 0) - (a.pubDate ? new Date(a.pubDate).getTime() : 0));
   return merged.slice(0, maxItems);
 }
 
@@ -146,7 +152,10 @@ export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 3): numb
   let weightSum = 0;
   let scoreSum = 0;
   for (const it of items) {
-    const ageHours = Math.max(0, (now - new Date(it.pubDate).getTime()) / 3_600_000);
+    // Undated headlines get the floor weight (treated as maximally old), not
+    // the "now" weight a fabricated timestamp used to hand them.
+    const ts = it.pubDate ? new Date(it.pubDate).getTime() : NaN;
+    const ageHours = Number.isFinite(ts) ? Math.max(0, (now - ts) / 3_600_000) : Infinity;
     const weight = Math.pow(0.5, ageHours / halfLifeHours);
     weightSum += weight;
     scoreSum += weight * it.sentimentScore;
@@ -167,14 +176,16 @@ export function weightedSentimentAvg(items: NewsItem[], halfLifeHours = 3): numb
  * headlines driving it.
  */
 export function sentimentTrend(items: NewsItem[], halfLifeHours = 3): { date: string; value: number }[] {
-  const chronological = [...items].reverse(); // oldest -> newest
+  // Undated items can't be placed on a timeline - they're excluded from the
+  // trend line entirely (they still count in the aggregate score above).
+  const chronological = [...items].filter((it) => it.pubDate).reverse(); // oldest -> newest
   const out: { date: string; value: number }[] = [];
   let weightSum = 0;
   let scoreSum = 0;
   let lastTime: number | null = null;
 
   for (const it of chronological) {
-    const t = new Date(it.pubDate).getTime();
+    const t = new Date(it.pubDate as string).getTime();
     if (lastTime !== null) {
       const elapsedHours = Math.max(0, (t - lastTime) / 3_600_000);
       const decay = Math.pow(0.5, elapsedHours / halfLifeHours);
@@ -184,7 +195,7 @@ export function sentimentTrend(items: NewsItem[], halfLifeHours = 3): { date: st
     weightSum += 1;
     scoreSum += it.sentimentScore;
     lastTime = t;
-    out.push({ date: it.pubDate, value: weightSum > 0 ? polarize(scoreSum / weightSum) : 0 });
+    out.push({ date: it.pubDate as string, value: weightSum > 0 ? polarize(scoreSum / weightSum) : 0 });
   }
 
   return out;

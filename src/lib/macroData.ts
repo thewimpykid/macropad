@@ -21,7 +21,7 @@ export interface ExtraStat {
 export interface NewsHeadlinePayload {
   title: string;
   link: string | null;
-  pubDate: string;
+  pubDate: string | null;
   source: string;
   sentimentScore: number;
   sentimentLabel: "bullish" | "bearish" | "neutral";
@@ -63,6 +63,16 @@ export interface MacroSeries {
   extraStats: ExtraStat[] | null;
   payload: SeriesPayload | null;
   source: string;
+  /**
+   * This row was NOT written by the most recent refresh - its upstream failed
+   * and the previous value is being retained. A successful refresh stamps
+   * every row it fetched with the same `updated_at`, so a row lagging the
+   * newest one was skipped. Set in getPanels; drives the per-card stale badge
+   * so a frozen value doesn't sit behind the board's green "synced" light.
+   */
+  stale?: boolean;
+  /** The date of this series' own most recent data point (YYYY-MM-DD), independent of when the refresh ran - "data through". */
+  dataThrough?: string | null;
 }
 
 export interface MacroPanel {

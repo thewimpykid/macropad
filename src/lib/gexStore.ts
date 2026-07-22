@@ -29,6 +29,11 @@ const TABLE = "gex_snapshots";
 const RATE_GATE_MS = 10_500; // y3os: 1 request per 10s per symbol
 const FRONT_STALE_MS = 25_000; // roughly matches the client's ~30s poll cadence
 const STALE_LOCK_MS = 30_000; // longer than any single y3os fetch should ever take - past this, a held lock is abandoned, not active
+// Well past FRONT_STALE_MS, so a quiet stretch with no visitors (the front
+// book only refreshes on real traffic) doesn't read as broken - but short
+// enough that a genuinely dead upstream is called out within one coffee break
+// rather than silently serving a previous session's book behind a LIVE dot.
+const FEED_DEAD_MS = 10 * 60 * 1000;
 
 interface SnapshotRow {
   symbol: string;
@@ -62,13 +67,18 @@ export async function getSnapshot(symbol: GexSymbol, base: string, key: string, 
   if (movePctOverride !== undefined) {
     const row = await readRow(symbol);
     const core = await fetchY3osFront(symbol, base, key);
-    if (!core) return row?.data ?? null; // rate-limited or upstream hiccup - fall back to last known snapshot rather than erroring
+    // Rate-limited or upstream hiccup - fall back to the last known snapshot
+    // rather than erroring, but flag it: the fallback is exactly the case
+    // where the caller must not be told this is live.
+    if (!core) return row?.data ? { ...row.data, stale: isStaleSnapshot(row) } : null;
     const merged = mergeColumn(rebaseColumns(row?.columns ?? [], core), frontColumn(core));
-    return buildGexResponse(symbol, core, merged, movePctOverride);
+    const built = buildGexResponse(symbol, core, merged, movePctOverride);
+    built.stale = isStaleData(built);
+    return built;
   }
 
   const row = await readRow(symbol);
-  if (row?.data) return row.data;
+  if (row?.data) return { ...row.data, stale: isStaleSnapshot(row) };
 
   // No snapshot yet - bootstrap synchronously (one request, fast).
   const core = await fetchY3osFront(symbol, base, key);
@@ -83,6 +93,42 @@ export async function getSnapshot(symbol: GexSymbol, base: string, key: string, 
     );
   }
   return response;
+}
+
+/** Today's date in market (ET) terms - the 0DTE book's `exp` is an ET trading date, so UTC "today" would flag a live book as expired every evening. */
+function marketToday(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+/**
+ * Three independent tells that a cached snapshot is no longer live, any one
+ * of which is decisive on its own:
+ * - the front book hasn't successfully refreshed in FEED_DEAD_MS (OUR fetch is
+ *   failing - note refreshSnapshotStep touches `last_request_at` even when the
+ *   fetch returns null, so only `front_updated_at` proves a real write), or
+ * - the feed answered us but the book it returned carries a frozen `asOf`
+ *   (response.asOf is the upstream's own data timestamp - a 200 OK over a
+ *   stale book, the one failure a fetch-succeeded check can't otherwise see), or
+ * - the 0DTE expiry it was built on has already passed, which no amount of
+ *   clock-watching can excuse.
+ */
+function isStaleSnapshot(row: SnapshotRow): boolean {
+  const frontUpdatedAt = row.front_updated_at ? new Date(row.front_updated_at).getTime() : 0;
+  if (Date.now() - frontUpdatedAt > FEED_DEAD_MS) return true;
+  return isStaleData(row.data);
+}
+
+/**
+ * The freshness tells that live purely in the served payload (the feed's own
+ * `asOf` frozen, or the 0DTE expiry already past) - the subset of
+ * isStaleSnapshot that doesn't need the row's fetch bookkeeping. Used on the
+ * fresh-fetch (movePctOverride / bootstrap) paths, where "our fetch failed"
+ * can't apply because it just succeeded, but a 200-OK-over-a-stale-book still can.
+ */
+function isStaleData(data: GexResponse | null): boolean {
+  if (!data) return false;
+  if (data.asOf && Date.now() - data.asOf > FEED_DEAD_MS) return true;
+  return !!data.resolvedExpiry && data.resolvedExpiry < marketToday();
 }
 
 function frontColumn(core: Y3Core): ColumnBook {

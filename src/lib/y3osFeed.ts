@@ -150,6 +150,8 @@ export interface Y3Core {
   q: number;
   T: number;
   dteHours: number;
+  /** The feed's OWN timestamp for this book (ms), not our fetch time. A 200 OK carrying a stale `asOf` is the one freshness failure the fetch-succeeded path can't otherwise see - threaded through so the response `asOf` reflects the data, not the render. Null if the feed omitted it. */
+  upstreamAsOf: number | null;
   resolvedExpiry: string;
   atmIv: number;
   chain: ChainStrikeInput[];
@@ -192,6 +194,8 @@ export async function fetchY3osFront(symbol: GexSymbol, base: string, key: strin
   }));
 
   const perStrike = mapPerStrike(front.exposure.perStrike);
+  const upstreamMs = front.asOf ? Date.parse(front.asOf) : NaN;
+  const upstreamAsOf = Number.isFinite(upstreamMs) ? upstreamMs : null;
   const dteHours = T * 365 * 24;
   const resolvedExpiry = front.selection?.exp ?? front.exposure.perExpiry?.[0]?.exp ?? "";
   const atmIv = front.quality?.atmIv ?? 0.2;
@@ -237,7 +241,7 @@ export async function fetchY3osFront(symbol: GexSymbol, base: string, key: strin
     .slice(0, 5)
     .map((row) => ({ exp: row.exp, dte: row.dte }));
 
-  return { spot, forward: rndForward ?? spot, r, q, T, dteHours, resolvedExpiry, atmIv, chain, perStrike, maxPain, crossExpiry, zeroDte, upcoming };
+  return { spot, forward: rndForward ?? spot, r, q, T, dteHours, upstreamAsOf, resolvedExpiry, atmIv, chain, perStrike, maxPain, crossExpiry, zeroDte, upcoming };
 }
 
 /** Fetches one extra expiry's per-strike book for the Chart/Heatmap/Topo columns - one y3os request. Caller is responsible for the 10s-per-symbol rate-limit spacing (see gexStore.ts). */

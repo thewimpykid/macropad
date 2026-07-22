@@ -1,7 +1,9 @@
 import { after } from "next/server";
+import { redirect } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
 import { getPanels } from "@/lib/getPanels";
 import { getMarkets } from "@/lib/getMarkets";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // Rendered fresh on every request - ISR kept serving a stale cached shell
 // after deploys (users saw the old UI until the hour-long revalidate window
@@ -24,6 +26,16 @@ function refreshUrl(): string {
  * /app, the pipeline runs at most ~hourly, same cadence as the cron.
  */
 export default async function AppPage() {
+  // Defense in depth: the proxy/middleware already gates /app, but the board
+  // is read via the service-role client (RLS-bypassing), so this page is the
+  // last thing between an unauthed request and the data. Re-check the session
+  // here so a middleware regression or matcher edit can't silently expose it.
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/signin?next=/app");
+
   const [{ panels, lastUpdated }, markets] = await Promise.all([getPanels(), getMarkets()]);
 
   const isStale = !lastUpdated || Date.now() - new Date(lastUpdated).getTime() > STALE_MS;

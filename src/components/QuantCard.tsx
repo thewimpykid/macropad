@@ -145,6 +145,14 @@ export default function QuantCard({
                 {score !== null && ` ${score > 0 ? "+" : ""}${score.toFixed(2)}`}]
               </span>
             )}
+            {series.stale && (
+              <span
+                className="shrink-0 rounded-sm border border-[var(--amber)] px-1 py-0.5 font-mono text-[0.54rem] uppercase tracking-[0.08em] text-[var(--amber)]"
+                title="This source didn't refresh in the latest sync - showing the last value it returned."
+              >
+                stale
+              </span>
+            )}
             {!isRelevant && (
               <span className="shrink-0 whitespace-nowrap font-sans text-[0.62rem] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
                 Not linked to {assetLabel ?? assetFilter}

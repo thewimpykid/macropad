@@ -13,9 +13,9 @@ import { IvSmileChart } from "@/components/optionsflow/IvSmileChart";
 
 export type OptionsFlowView = "terminal";
 
-// y3os (this terminal's data source) only covers QQQ and SPX live - SPY/NDX
-// return an explicit SYMBOL_NOT_AVAILABLE, confirmed directly against the
-// feed rather than silently substituted.
+// Only QQQ and SPX are served live - other symbols return an explicit
+// not-available from the feed, confirmed directly rather than silently
+// substituted. (Never name the upstream vendor in client code.)
 const SYMBOLS: GexSymbol[] = ["QQQ", "SPX"];
 
 function SymbolToggle({ symbol, onChange }: { symbol: GexSymbol; onChange: (s: GexSymbol) => void }) {
@@ -42,8 +42,14 @@ export interface SpotTick {
   at: number;
 }
 
-/** Pulsing feed indicator + seconds-since-update, self-ticking so the rest of the page doesn't re-render every second. */
-function LiveStatus({ asOf, deepReady, degraded }: { asOf: number; deepReady: boolean; degraded: boolean }) {
+/**
+ * Pulsing feed indicator + seconds-since-update, self-ticking so the rest of
+ * the page doesn't re-render every second. `degraded` means our own poll is
+ * failing; `stale` means the poll succeeds but the book behind it stopped
+ * advancing (dead upstream) - a different failure that used to render as a
+ * green LIVE dot over a previous session's expiry.
+ */
+function LiveStatus({ asOf, deepReady, degraded, stale }: { asOf: number; deepReady: boolean; degraded: boolean; stale: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -51,7 +57,8 @@ function LiveStatus({ asOf, deepReady, degraded }: { asOf: number; deepReady: bo
   }, []);
   const secs = Math.max(0, Math.floor((now - asOf) / 1000));
   const age = secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
-  const dotColor = degraded ? "var(--amber)" : "var(--up)";
+  const dotColor = stale ? "var(--down)" : degraded ? "var(--amber)" : "var(--up)";
+  const label = stale ? "stale feed" : degraded ? "reconnecting" : "live";
   return (
     <div className="flex items-center gap-3 font-mono text-[0.62rem] text-[var(--text-faint)]">
       {!deepReady && (
@@ -62,7 +69,7 @@ function LiveStatus({ asOf, deepReady, degraded }: { asOf: number; deepReady: bo
       )}
       <span className="flex items-center gap-1.5 uppercase tracking-[0.1em]">
         <span className="live-dot h-1.5 w-1.5 rounded-full" style={{ background: dotColor }} />
-        {degraded ? "reconnecting" : "live"} · {age} ago
+        {label} · {age} ago
       </span>
     </div>
   );
@@ -737,7 +744,7 @@ function FlowSession({ symbol, onSymbolChange }: { symbol: GexSymbol; onSymbolCh
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SymbolToggle symbol={symbol} onChange={onSymbolChange} />
-        {data && <LiveStatus asOf={data.asOf} deepReady={deepReady} degraded={degraded} />}
+        {data && <LiveStatus asOf={data.asOf} deepReady={deepReady} degraded={degraded} stale={!!data.stale} />}
       </div>
 
       {!data && !hardError && (

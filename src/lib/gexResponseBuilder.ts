@@ -50,6 +50,11 @@ export function buildGexResponse(symbol: GexSymbol, core: Y3Core, columns: Colum
 
   response.atmIv = atmIv;
   response.ivSmile = ivSmile;
+  // Prefer the feed's own data timestamp over build time - a book the feed
+  // stamped two hours ago must read "2h ago", not a freshly-minted "now".
+  // Cap at the current instant so a fast/skewed upstream clock can't stamp
+  // the future (which would render as a negative age).
+  if (core.upstreamAsOf !== null) response.asOf = Math.min(core.upstreamAsOf, Date.now());
 
   const validContracts = chain.filter((row) => row.oi > 0 && row.iv > 0).length;
   const invalidContracts = rawChain.filter((row) => !(row.oi > 0 && row.iv > 0)).length;
@@ -94,7 +99,10 @@ export function buildGexResponse(symbol: GexSymbol, core: Y3Core, columns: Colum
     flowImbalance: null,
     validContracts,
     ivSurfaceFitError: computeIvSurfaceFitError(rawChain, sviParams, forward, T),
-    pricerEngineLabel: "Vendor-computed per-strike greeks (y3os /greeks, real OI/IV) for GEX/DEX/VEX/CEX/TEX/VEGAEX; this app's own Black-Scholes reprice only for the Effective GEX/Shadow Gamma scenario tables",
+    // This label is serialized into the client-facing /api/gex JSON
+    // (gammaEngine.diagnostics.pricingEngine) - it must NOT name the upstream
+    // vendor. Kept generic on purpose.
+    pricerEngineLabel: "Vendor-computed per-strike greeks (real OI/IV) for GEX/DEX/VEX/CEX/TEX/VEGAEX; this app's own Black-Scholes reprice only for the Effective GEX/Shadow Gamma scenario tables",
   });
 
   response.deltaEngine = computeDeltaEngine({

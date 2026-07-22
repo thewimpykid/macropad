@@ -11,8 +11,11 @@ const NewsGlobe = dynamic(() => import("@/components/NewsGlobe"), {
   loading: () => <div className="h-[360px] w-full border border-[var(--border)] bg-[var(--panel)]" aria-hidden />,
 });
 
-function fmtDateTime(d: string) {
-  return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+function fmtDateTime(d: string | null) {
+  if (!d) return "undated";
+  const t = new Date(d);
+  if (Number.isNaN(t.getTime())) return "undated";
+  return t.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 const toneColor: Record<"bullish" | "bearish" | "neutral", string> = {

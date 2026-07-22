@@ -628,8 +628,8 @@ export default function TerminalPage({ panels, markets }: { panels: MacroPanel[]
       emit([
         [{ t: symbolMatch ? `NEWS  ·  ${symbolMatch.label}` : "NEWS  ·  general macro feed", c: "var(--text-dim)" }],
         ...headlines.slice(0, 10).flatMap((h): Token[][] => {
-          const day = new Date(h.pubDate);
-          const dayStr = Number.isNaN(day.getTime()) ? "" : day.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          const day = h.pubDate ? new Date(h.pubDate) : null;
+          const dayStr = !day || Number.isNaN(day.getTime()) ? "" : day.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           const tag = h.sentimentLabel.toUpperCase().slice(0, 4);
           return [
             [

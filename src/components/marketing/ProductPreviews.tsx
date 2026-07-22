@@ -198,7 +198,8 @@ export function BiasPreview({ panels }: { panels: MacroPanel[] }) {
 }
 
 /** Real scored headlines from the live news feed. Outlet names stay off the marketing page. */
-function fmtDay(iso: string): string {
+function fmtDay(iso: string | null): string {
+  if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });

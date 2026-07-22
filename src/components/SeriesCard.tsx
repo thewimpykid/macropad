@@ -44,9 +44,19 @@ export default function SeriesCard({
           <h3 className="m-0 truncate text-[0.92rem] font-semibold text-[var(--text)]">{series.name}</h3>
           <p className="m-0 mt-0.5 text-[0.78rem] leading-snug text-[var(--text-dim)]">{series.note}</p>
         </div>
-        <span className="shrink-0 font-mono text-[0.78rem]" style={{ color: chipColor }} title={toneLabel[signalTone]}>
-          {dirGlyph[signalTone]}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {series.stale && (
+            <span
+              className="rounded-sm border border-[var(--amber)] px-1 py-0.5 font-mono text-[0.54rem] uppercase tracking-[0.08em] text-[var(--amber)]"
+              title="This source didn't refresh in the latest sync - showing the last value it returned."
+            >
+              stale
+            </span>
+          )}
+          <span className="font-mono text-[0.78rem]" style={{ color: chipColor }} title={toneLabel[signalTone]}>
+            {dirGlyph[signalTone]}
+          </span>
+        </div>
       </div>
 
       {!isRelevant && (

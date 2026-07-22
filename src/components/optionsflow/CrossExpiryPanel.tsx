@@ -10,8 +10,8 @@ const STRIKE_WINDOW = 26; // ~+-13 strikes around spot
 type Metric = "gex" | "dex" | "vex" | "cex" | "tex" | "vegaex";
 const METRIC_LABEL: Record<Metric, string> = { gex: "GEX", dex: "DEX", vex: "VEX", cex: "CHEX", tex: "THETA", vegaex: "VEGA" };
 const METRIC_ORDER: Metric[] = ["gex", "dex", "vex", "cex", "tex", "vegaex"];
-// Only the symbols /api/gex actually serves (y3os covers QQQ/SPX live) -
-// offering SPY/NDX here just renders a guaranteed 400 error panel.
+// Only the symbols /api/gex actually serves live (QQQ/SPX) - offering
+// SPY/NDX here just renders a guaranteed 400 error panel.
 const TICKERS: GexSymbol[] = ["QQQ", "SPX"];
 
 type Mode = "traditional" | "effective" | "shadow";

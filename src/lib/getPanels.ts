@@ -78,14 +78,24 @@ export async function getPanels(): Promise<{ panels: MacroPanel[]; lastUpdated: 
   }
 
   const byId = new Map<string, DbRow>(data.map((row) => [row.id, row]));
-  let lastUpdated: string | null = null;
+
+  // The newest updated_at across the whole table = when the last successful
+  // refresh ran. A successful refresh stamps every row it fetched with this
+  // same instant, so any row whose updated_at trails it by more than a small
+  // margin was SKIPPED that run (its upstream failed) and is showing a stale
+  // value. Compute the max first so every row can be judged against it.
+  const newestUpdatedAt = data.reduce<string | null>((max, row) => (!max || row.updated_at > max ? row.updated_at : max), null);
+  const newestMs = newestUpdatedAt ? new Date(newestUpdatedAt).getTime() : 0;
+  const STALE_ROW_LAG_MS = 5 * 60 * 1000; // same-run rows share an identical stamp; anything materially behind was skipped
 
   const panels = macroPanels.map((panel) => ({
     ...panel,
     series: panel.series.map((s) => {
       const row = byId.get(s.id);
       if (!row) return stripSource(s);
-      if (!lastUpdated || row.updated_at > lastUpdated) lastUpdated = row.updated_at;
+      const rowMs = new Date(row.updated_at).getTime();
+      const stale = newestMs - rowMs > STALE_ROW_LAG_MS;
+      const history = row.history;
       return {
         ...s,
         value: row.value,
@@ -94,13 +104,15 @@ export async function getPanels(): Promise<{ panels: MacroPanel[]; lastUpdated: 
         zscore: row.zscore,
         sparkline: row.sparkline,
         windowLabel: row.window_label,
-        history: row.history,
+        history,
         extraStats: row.extra_stats,
         payload: row.payload ?? null,
         source: "",
+        stale,
+        dataThrough: history?.length ? history[history.length - 1].date : null,
       };
     }),
   }));
 
-  return { panels, lastUpdated };
+  return { panels, lastUpdated: newestUpdatedAt };
 }

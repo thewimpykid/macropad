@@ -1,6 +1,17 @@
 import type { NextRequest } from "next/server";
 
 /**
+ * The local design-review escape hatch (DEV_PREVIEW=1 disables the auth gate
+ * on /dev-preview and /api/gex). Hard-gated on NODE_ENV so that even if the
+ * flag ever leaks into a production deploy's env it CANNOT re-open those
+ * surfaces - a served prod build ignores it entirely. Never rely on the flag
+ * alone.
+ */
+export function isDevPreview(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.DEV_PREVIEW === "1";
+}
+
+/**
  * Founder-only direct API access, via an `x-api-key` header that is never
  * shipped to any client. Reads FOUNDER_API_KEY, falling back to CRON_SECRET
  * so it works on the existing Vercel env without adding a new variable.

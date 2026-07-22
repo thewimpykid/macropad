@@ -3,7 +3,7 @@ import type { GexSymbol } from "@/lib/gex";
 import { getSnapshot, refreshSnapshotStep } from "@/lib/gexStore";
 import { fetchYahooPrice } from "@/lib/yahoo";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { hasFounderKey, isSiteRequest } from "@/lib/apiAccess";
+import { hasFounderKey, isSiteRequest, isDevPreview } from "@/lib/apiAccess";
 
 // y3os only serves these two live - confirmed directly against the feed
 // (SPY/NDX return an explicit SYMBOL_NOT_AVAILABLE, not a silent SPX
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   // their own programs. Founders bypass both with the x-api-key header
   // (never shipped to clients). DEV_PREVIEW is the local design-review
   // escape hatch (/dev-preview has no session to send); never set in prod.
-  if (process.env.DEV_PREVIEW !== "1" && !hasFounderKey(request)) {
+  if (!isDevPreview() && !hasFounderKey(request)) {
     if (!isSiteRequest(request)) {
       return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
@@ -65,8 +65,12 @@ export async function GET(request: NextRequest) {
   }
 
   // Live tick wins when available; the y3os-derived spot is only a
-  // fallback (upstream Yahoo hiccup), never the default.
-  if (liveSpot.price !== null && Number.isFinite(liveSpot.price)) {
+  // fallback (upstream Yahoo hiccup), never the default. But NOT when the
+  // book itself is stale: a live-ticking spot painted over dead walls/GEX
+  // levels is the exact "live light over dead data" contradiction the stale
+  // flag exists to kill - keep the frozen book's own spot so everything on
+  // screen is from the same (stale) instant.
+  if (!response.stale && liveSpot.price !== null && Number.isFinite(liveSpot.price)) {
     response.spot = liveSpot.price;
   }
 

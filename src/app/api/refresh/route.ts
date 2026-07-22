@@ -1639,7 +1639,7 @@ export async function GET(req: NextRequest) {
           seen.add(key);
           return true;
         })
-        .sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
+        .sort((a, b) => (b.pubDate ? new Date(b.pubDate).getTime() : 0) - (a.pubDate ? new Date(a.pubDate).getTime() : 0))
         .slice(0, 60);
 
       const sentimentHistory: HistPoint[] = sentimentTrend(merged);

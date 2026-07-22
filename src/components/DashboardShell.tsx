@@ -215,6 +215,25 @@ export default function DashboardShell({
 }) {
   const [activeId, setActiveId] = useState(BOARD_ID);
   const [navOpen, setNavOpen] = useState(false);
+
+  // The refresh pipeline runs at least hourly (cron + on-demand), rewriting
+  // rows with a fresh updated_at even when values are unchanged - so a
+  // lastUpdated more than a few hours old means the pipeline itself is
+  // failing, not just a quiet market. Flag it instead of pulsing a green
+  // "synced" dot over a dead board. (Partial-source failures are flagged
+  // per-card via series.stale; this is the all-stopped case.)
+  const SYNC_STALE_MS = 3 * 60 * 60 * 1000;
+  const lastUpdatedMs = lastUpdated ? new Date(lastUpdated).getTime() : null;
+  const syncStale = lastUpdatedMs === null || Date.now() - lastUpdatedMs > SYNC_STALE_MS;
+  const syncedLabel = (() => {
+    if (!lastUpdated) return "not yet synced";
+    const d = new Date(lastUpdated);
+    const isToday = d.toDateString() === new Date().toDateString();
+    const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    // Always include the date when the sync isn't from today, so a stalled
+    // pipeline can't read as "this morning" off a bare time-of-day.
+    return isToday ? `synced ${time}` : `synced ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${time}`;
+  })();
   // Layout prefs from the settings panel: which side the sidebar lives on and
   // where the utility bar (clock/settings/sign-out) sits inside it. Loaded
   // after mount (localStorage) and kept live via the prefs event.
@@ -418,11 +437,15 @@ export default function DashboardShell({
               <Wordmark />
             </a>
             <div className="relative mt-3 flex items-center gap-1.5 eyebrow">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--up)] opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--up)]" />
-              </span>
-              {lastUpdated ? `synced ${new Date(lastUpdated).toLocaleTimeString()}` : "not yet synced"}
+              {syncStale ? (
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--amber)]" />
+              ) : (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--up)] opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--up)]" />
+                </span>
+              )}
+              {syncedLabel}
             </div>
           </div>
 
