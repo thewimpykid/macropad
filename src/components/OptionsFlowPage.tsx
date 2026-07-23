@@ -449,11 +449,13 @@ function TerminalView({
     { label: data.kingNode.type === "pin" ? "King·Pin" : "King·Repel", price: data.kingNode.strike, color: "var(--text-faint)" },
   ];
   const spineBand = data.zeroDte && data.zeroDte.expectedMove1s > 0 ? { lo: data.spot - data.zeroDte.expectedMove1s, hi: data.spot + data.zeroDte.expectedMove1s } : null;
-  // Everything annotated on the strike views, exportable via CopyLevelsButton.
-  const copyLevels = [
-    ...spineAnnotations.map((a) => ({ label: a.label, price: a.price })),
-    ...(spineBand ? [{ label: "EM High", price: spineBand.hi }, { label: "EM Low", price: spineBand.lo }] : []),
-  ];
+  // Every level annotated on the strike views (the ±1σ band is a range, not
+  // a level - deliberately not exported), exportable via CopyLevelsButton.
+  // Labels go out lowercase, with the gamma flip as "γ flip".
+  const copyLevels = spineAnnotations.map((a) => ({
+    label: a.label.toLowerCase().replace("g-flip", "γ flip"),
+    price: a.price,
+  }));
   const spineLobeLabels: [string, string] = scenarioBoth
     ? [`−${data.effectiveGex ? fmtNum(data.effectiveGex.moveDownPct * 100, 1) : "—"}% move`, `+${data.effectiveGex ? fmtNum(data.effectiveGex.moveUpPct * 100, 1) : "—"}% move`]
     : [`− ${chartUnitLabel}`, `+ ${chartUnitLabel}`];
