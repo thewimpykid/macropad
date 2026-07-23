@@ -176,6 +176,7 @@ function InstrumentStrip({
   putWall,
   phaseColor,
   deepReady,
+  copyLevels,
 }: {
   data: GexResponse;
   tick: SpotTick;
@@ -183,6 +184,7 @@ function InstrumentStrip({
   putWall: number | null;
   phaseColor: string;
   deepReady: boolean;
+  copyLevels: { label: string; price: number }[];
 }) {
   const gammaEngine = data.gammaEngine;
   return (
@@ -211,7 +213,8 @@ function InstrumentStrip({
       <StripCell label="±1σ" value={data.zeroDte ? fmtNum(data.zeroDte.expectedMove1s, 2) : "—"} />
       <StripCell label="P/C" value={data.zeroDte ? fmtNum(data.zeroDte.pcRatio, 2) : "—"} />
       <StripCell label="ATM IV" value={data.atmIv !== undefined ? `${fmtNum(data.atmIv * 100, 1)}%` : "—"} />
-      <div className="ml-auto flex items-center pl-4">
+      <div className="ml-auto flex items-center gap-3 pl-4">
+        <CopyLevelsButton levels={copyLevels} />
         {gammaEngine ? (
           <span className="flex items-center gap-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.06em]" style={{ color: phaseColor }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: phaseColor }} />
@@ -462,7 +465,7 @@ function TerminalView({
 
   return (
     <div className="flex flex-col gap-4">
-      <InstrumentStrip data={data} tick={tick} callWall={heroCallWall} putWall={heroPutWall} phaseColor={phaseColor} deepReady={deepReady} />
+      <InstrumentStrip data={data} tick={tick} callWall={heroCallWall} putWall={heroPutWall} phaseColor={phaseColor} deepReady={deepReady} copyLevels={copyLevels} />
 
       {gammaEngine && (
         <p className="m-0 border-l-2 pl-3 font-sans text-[0.72rem] leading-relaxed text-[var(--text-dim)]" style={{ borderColor: phaseColor }}>
@@ -610,7 +613,6 @@ function TerminalView({
                 {chartUnitLabel}
                 {mode === "traditional" && dteColumns.length ? ` · ${dteColumns[clampedDteIndex]?.label ?? "0DTE"}${dteScope === "cumulative" && clampedDteIndex > 0 ? " ∑" : ""}` : ""}
               </span>
-              <CopyLevelsButton levels={copyLevels} />
               <div className="inline-flex border border-[var(--border)]">
                 {(["spine", "bars"] as const).map((v) => (
                   <button
