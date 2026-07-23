@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { fmtNum, fmtUsd } from "@/lib/gex";
+import { fmtStrikeLabel, layoutAroundPivot } from "@/components/optionsflow/labelLayout";
 
 export interface TerminalMetricPoint {
   strike: number;
@@ -13,6 +14,8 @@ export interface WallMarker {
   label: string;
   price: number;
   color: string;
+  /** true for the #2-ranked walls - rendered at reduced weight so primaries stay dominant. */
+  dim?: boolean;
 }
 
 /** Actual walls: the strikes carrying the largest exposure for the selected Greek, ranked, split by side. Positive-side strikes are dealer-sign-convention "call-like" for every Greek except DEX (which keeps its own natural, unflipped delta sign - see gex.ts), so DEX gets Long/Short labels instead of Call/Put. */
@@ -22,9 +25,78 @@ export function computeTopWalls(rows: TerminalMetricPoint[], metric: string, cou
   const positives = [...rows].filter((r) => r.value > 0).sort((a, b) => b.value - a.value).slice(0, count);
   const negatives = [...rows].filter((r) => r.value < 0).sort((a, b) => a.value - b.value).slice(0, count);
   return [
-    ...positives.map((r, i) => ({ label: i === 0 ? posLabel : `${posLabel} #${i + 1}`, price: r.strike, color: "var(--up)" })),
-    ...negatives.map((r, i) => ({ label: i === 0 ? negLabel : `${negLabel} #${i + 1}`, price: r.strike, color: "var(--down)" })),
+    ...positives.map((r, i) => ({ label: i === 0 ? posLabel : `${posLabel} #${i + 1}`, price: r.strike, color: "var(--up)", dim: i > 0 })),
+    ...negatives.map((r, i) => ({ label: i === 0 ? negLabel : `${negLabel} #${i + 1}`, price: r.strike, color: "var(--down)", dim: i > 0 })),
   ];
+}
+
+/**
+ * Right-margin label for a horizontal ReferenceLine, with a background halo
+ * (so it stays readable over gridlines/bars) and an optional dashed elbow
+ * leader when the collision layout has displaced it from its true line.
+ */
+function RefLineLabel({
+  viewBox,
+  value,
+  fill,
+  dy = 0,
+  dim = false,
+  bold = false,
+}: {
+  viewBox?: { x: number; y: number; width: number };
+  value: string;
+  fill: string;
+  dy?: number;
+  dim?: boolean;
+  bold?: boolean;
+}) {
+  if (!viewBox) return null;
+  const lx = viewBox.x + viewBox.width;
+  const ty = viewBox.y + dy;
+  return (
+    <g opacity={dim ? 0.55 : 1}>
+      {Math.abs(dy) > 1 && <path d={`M ${lx} ${viewBox.y} L ${lx + 5} ${ty}`} stroke={fill} strokeDasharray="2 2" fill="none" opacity={0.5} />}
+      <text
+        x={lx + 7}
+        y={ty + 3}
+        fill={fill}
+        fontSize={10}
+        fontWeight={bold ? 700 : 400}
+        fontFamily="var(--font-data), monospace"
+        stroke="var(--panel)"
+        strokeWidth={3}
+        paintOrder="stroke"
+      >
+        {value}
+      </text>
+    </g>
+  );
+}
+
+/**
+ * Collision layout for the right-margin level labels: category rows are
+ * evenly spaced, so each label's ideal y is derived from its snapped strike's
+ * row index, then everything is spread around the spot label (immovable)
+ * via the same lane layout the spine uses. Returns dy per wall label.
+ */
+function layoutWallLabelDy(
+  wallLines: (WallMarker & { snappedStrike: number })[],
+  strikes: number[],
+  nearestIdx: number,
+  height: number
+): Map<string, number> {
+  const AXIS_H = 30; // recharts default XAxis height
+  const MT = 4;
+  const plotH = Math.max(0, height - MT - 4 - AXIS_H);
+  const rowH = strikes.length ? plotH / strikes.length : 0;
+  const approxY = (idx: number) => MT + rowH * (idx + 0.5);
+  const withIdx = wallLines.map((w) => ({ ...w, idx: strikes.indexOf(w.snappedStrike) }));
+  const laid = layoutAroundPivot(
+    withIdx.map((w) => ({ key: w.label, y: approxY(w.idx) })),
+    approxY(nearestIdx),
+    { pivotGap: 14, minGap: 13, top: MT + 6, bottom: MT + plotH - 4 }
+  );
+  return new Map(withIdx.map((w) => [w.label, (laid.get(w.label) ?? approxY(w.idx)) - approxY(w.idx)]));
 }
 
 /** Horizontal diverging bar chart - strike on the Y axis, exposure on the X axis - matching a classic options-terminal gamma profile. Optional wall/pain/flip reference lines snap to the nearest strike actually present in the data (a category axis can only draw a line exactly on one of its ticks). */
@@ -55,11 +127,13 @@ export function TerminalExposureChart({
       return nearest ? { ...w, snappedStrike: nearest.strike } : null;
     })
     .filter((w): w is WallMarker & { snappedStrike: number } => w !== null);
+  const labelDy = layoutWallLabelDy(wallLines, sorted.map((d) => d.strike), nearestIdx, height);
+  const wallStrikes = new Set(wallLines.map((w) => w.snappedStrike));
 
   return (
     <div className="w-full" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 90, bottom: 4, left: 0 }} barCategoryGap="15%">
+        <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 104, bottom: 4, left: 0 }} barCategoryGap="15%">
           <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" horizontal={false} />
           <XAxis type="number" tick={{ fill: "var(--text-faint)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => valueFormatter(Number(v))} />
           <YAxis
@@ -72,23 +146,24 @@ export function TerminalExposureChart({
             interval={showAllTicks ? 0 : Math.max(0, Math.floor(sorted.length / 20))}
           />
           <ReferenceLine x={0} stroke="var(--border-strong)" />
-          {sorted[nearestIdx] && (
-            <ReferenceLine
-              y={sorted[nearestIdx].strike}
-              stroke="var(--text)"
-              strokeDasharray="2 2"
-              label={{ value: `Spot ${fmtNum(spot, 2)}`, position: "right", fill: "var(--text)", fontSize: 10 }}
-            />
-          )}
           {wallLines.map((w) => (
             <ReferenceLine
               key={w.label}
               y={w.snappedStrike}
               stroke={w.color}
+              strokeOpacity={w.dim ? 0.4 : 0.8}
               strokeDasharray="4 3"
-              label={{ value: `${w.label} ${fmtNum(w.price, 2)}`, position: "right", fill: w.color, fontSize: 10 }}
+              label={<RefLineLabel value={`${w.label} ${fmtStrikeLabel(w.price)}`} fill={w.color} dy={labelDy.get(w.label) ?? 0} dim={w.dim} />}
             />
           ))}
+          {sorted[nearestIdx] && (
+            <ReferenceLine
+              y={sorted[nearestIdx].strike}
+              stroke="var(--text)"
+              strokeDasharray="2 2"
+              label={<RefLineLabel value={`Spot ${fmtNum(spot, 2)}`} fill="var(--text)" bold />}
+            />
+          )}
           <Tooltip
             cursor={{ fill: "var(--panel-2)", opacity: 0.5 }}
             contentStyle={{ background: "var(--panel)", border: "1px solid var(--border-strong)", borderRadius: 3, fontSize: 11 }}
@@ -97,7 +172,13 @@ export function TerminalExposureChart({
           />
           <Bar dataKey="value" isAnimationActive={false} radius={[2, 2, 2, 2]}>
             {sorted.map((d, i) => (
-              <Cell key={i} fill={d.value >= 0 ? "var(--up)" : "var(--down)"} stroke={i === nearestIdx ? "var(--text)" : undefined} strokeWidth={i === nearestIdx ? 1 : 0} />
+              <Cell
+                key={i}
+                fill={d.value >= 0 ? "var(--up)" : "var(--down)"}
+                fillOpacity={wallStrikes.has(d.strike) ? 0.95 : i === nearestIdx ? 0.8 : 0.5}
+                stroke={i === nearestIdx ? "var(--text)" : undefined}
+                strokeWidth={i === nearestIdx ? 1 : 0}
+              />
             ))}
           </Bar>
         </BarChart>
@@ -139,11 +220,13 @@ export function TerminalDualBarChart({
       return nearest ? { ...w, snappedStrike: nearest.strike } : null;
     })
     .filter((w): w is WallMarker & { snappedStrike: number } => w !== null);
+  const labelDy = layoutWallLabelDy(wallLines, sorted.map((d) => d.strike), nearestIdx, height);
+  const wallStrikes = new Set(wallLines.map((w) => w.snappedStrike));
 
   return (
     <div className="w-full" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 90, bottom: 4, left: 0 }} barCategoryGap="20%" barGap={1}>
+        <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 104, bottom: 4, left: 0 }} barCategoryGap="20%" barGap={1}>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" horizontal={false} />
           <XAxis type="number" tick={{ fill: "var(--text-faint)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => valueFormatter(Number(v))} />
           <YAxis
@@ -156,23 +239,24 @@ export function TerminalDualBarChart({
             interval={showAllTicks ? 0 : Math.max(0, Math.floor(sorted.length / 20))}
           />
           <ReferenceLine x={0} stroke="var(--border-strong)" />
-          {sorted[nearestIdx] && (
-            <ReferenceLine
-              y={sorted[nearestIdx].strike}
-              stroke="var(--text)"
-              strokeDasharray="2 2"
-              label={{ value: `Spot ${fmtNum(spot, 2)}`, position: "right", fill: "var(--text)", fontSize: 10 }}
-            />
-          )}
           {wallLines.map((w) => (
             <ReferenceLine
               key={w.label}
               y={w.snappedStrike}
               stroke={w.color}
+              strokeOpacity={w.dim ? 0.4 : 0.8}
               strokeDasharray="4 3"
-              label={{ value: `${w.label} ${fmtNum(w.price, 2)}`, position: "right", fill: w.color, fontSize: 10 }}
+              label={<RefLineLabel value={`${w.label} ${fmtStrikeLabel(w.price)}`} fill={w.color} dy={labelDy.get(w.label) ?? 0} dim={w.dim} />}
             />
           ))}
+          {sorted[nearestIdx] && (
+            <ReferenceLine
+              y={sorted[nearestIdx].strike}
+              stroke="var(--text)"
+              strokeDasharray="2 2"
+              label={<RefLineLabel value={`Spot ${fmtNum(spot, 2)}`} fill="var(--text)" bold />}
+            />
+          )}
           <Tooltip
             cursor={{ fill: "var(--panel-2)", opacity: 0.5 }}
             contentStyle={{ background: "var(--panel)", border: "1px solid var(--border-strong)", borderRadius: 3, fontSize: 11 }}
@@ -181,12 +265,24 @@ export function TerminalDualBarChart({
           />
           <Bar dataKey="up" isAnimationActive={false} radius={[2, 2, 2, 2]}>
             {sorted.map((d, i) => (
-              <Cell key={i} fill="var(--up)" stroke={i === nearestIdx ? "var(--text)" : undefined} strokeWidth={i === nearestIdx ? 1 : 0} />
+              <Cell
+                key={i}
+                fill="var(--up)"
+                fillOpacity={wallStrikes.has(d.strike) ? 0.95 : i === nearestIdx ? 0.8 : 0.5}
+                stroke={i === nearestIdx ? "var(--text)" : undefined}
+                strokeWidth={i === nearestIdx ? 1 : 0}
+              />
             ))}
           </Bar>
           <Bar dataKey="down" isAnimationActive={false} radius={[2, 2, 2, 2]}>
             {sorted.map((d, i) => (
-              <Cell key={i} fill="var(--down)" stroke={i === nearestIdx ? "var(--text)" : undefined} strokeWidth={i === nearestIdx ? 1 : 0} />
+              <Cell
+                key={i}
+                fill="var(--down)"
+                fillOpacity={wallStrikes.has(d.strike) ? 0.95 : i === nearestIdx ? 0.8 : 0.5}
+                stroke={i === nearestIdx ? "var(--text)" : undefined}
+                strokeWidth={i === nearestIdx ? 1 : 0}
+              />
             ))}
           </Bar>
         </BarChart>

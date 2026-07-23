@@ -116,6 +116,47 @@ function Drawer({ index, title, hint, open, onToggle, children }: { index: strin
   );
 }
 
+/**
+ * Copies every plotted level as `price "label"` lines - one level per line,
+ * label in quotes, plain unformatted numbers (no thousands separators, which
+ * would break the parse) - the paste format chart "levels from text"
+ * importer indicators read, so the walls/pivots on screen can be dropped
+ * straight onto a price chart. Same-price levels merge onto one line.
+ */
+function CopyLevelsButton({ levels }: { levels: { label: string; price: number }[] }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  useEffect(() => {
+    if (state === "idle") return;
+    const t = setTimeout(() => setState("idle"), 1600);
+    return () => clearTimeout(t);
+  }, [state]);
+  function onCopy() {
+    const byPrice = new Map<number, string[]>();
+    for (const l of levels) {
+      const p = Math.round(l.price * 100) / 100;
+      byPrice.set(p, [...(byPrice.get(p) ?? []), l.label.replace(/·/g, " ")]);
+    }
+    const text = [...byPrice.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([p, labels]) => `${p} "${labels.join(" / ")}"`)
+      .join("\n");
+    navigator.clipboard
+      .writeText(text)
+      .then(() => setState("copied"))
+      .catch(() => setState("failed"));
+  }
+  return (
+    <button
+      onClick={onCopy}
+      disabled={!levels.length}
+      title={'Copy all plotted levels as price "label" lines - paste into a chart level-importer indicator'}
+      className="border border-[var(--border)] px-2 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-[0.06em] text-[var(--text-dim)] transition-colors duration-150 hover:text-[var(--text)] disabled:opacity-40"
+    >
+      {state === "copied" ? "✓ copied" : state === "failed" ? "copy failed" : "copy levels"}
+    </button>
+  );
+}
+
 function StripCell({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex flex-col justify-center gap-0.5 border-l border-[var(--border)] px-4 py-2">
@@ -402,12 +443,17 @@ function TerminalView({
     return chartData.map((d) => ({ strike: d.strike, right: Math.max(0, d.value), left: Math.max(0, -d.value), readout: fmt(d.value) }));
   }, [scenarioBoth, chartDualData, chartData, mode]);
   const spineAnnotations: SpineAnnotation[] = [
-    ...walls.map((w) => ({ label: w.label, price: w.price, color: w.color })),
+    ...walls.map((w) => ({ label: w.label, price: w.price, color: w.color, dim: w.dim })),
     ...(data.maxPain > 0 ? [{ label: "Max Pain", price: data.maxPain, color: "var(--text-dim)" }] : []),
     ...(data.gammaFlip !== null ? [{ label: "G-Flip", price: data.gammaFlip, color: "var(--text-dim)" }] : []),
     { label: data.kingNode.type === "pin" ? "King·Pin" : "King·Repel", price: data.kingNode.strike, color: "var(--text-faint)" },
   ];
   const spineBand = data.zeroDte && data.zeroDte.expectedMove1s > 0 ? { lo: data.spot - data.zeroDte.expectedMove1s, hi: data.spot + data.zeroDte.expectedMove1s } : null;
+  // Everything annotated on the strike views, exportable via CopyLevelsButton.
+  const copyLevels = [
+    ...spineAnnotations.map((a) => ({ label: a.label, price: a.price })),
+    ...(spineBand ? [{ label: "EM High", price: spineBand.hi }, { label: "EM Low", price: spineBand.lo }] : []),
+  ];
   const spineLobeLabels: [string, string] = scenarioBoth
     ? [`−${data.effectiveGex ? fmtNum(data.effectiveGex.moveDownPct * 100, 1) : "—"}% move`, `+${data.effectiveGex ? fmtNum(data.effectiveGex.moveUpPct * 100, 1) : "—"}% move`]
     : [`− ${chartUnitLabel}`, `+ ${chartUnitLabel}`];
@@ -562,6 +608,7 @@ function TerminalView({
                 {chartUnitLabel}
                 {mode === "traditional" && dteColumns.length ? ` · ${dteColumns[clampedDteIndex]?.label ?? "0DTE"}${dteScope === "cumulative" && clampedDteIndex > 0 ? " ∑" : ""}` : ""}
               </span>
+              <CopyLevelsButton levels={copyLevels} />
               <div className="inline-flex border border-[var(--border)]">
                 {(["spine", "bars"] as const).map((v) => (
                   <button

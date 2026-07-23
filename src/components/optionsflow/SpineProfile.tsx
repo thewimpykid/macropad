@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fmtNum } from "@/lib/gex";
+import { fmtStrikeLabel, layoutAroundPivot } from "@/components/optionsflow/labelLayout";
 
 export interface SpinePoint {
   strike: number;
@@ -29,6 +30,8 @@ export interface SpineAnnotation {
   label: string;
   price: number;
   color: string;
+  /** Secondary levels (#2 walls) render at reduced weight so the primary walls stay dominant. */
+  dim?: boolean;
 }
 
 function useMeasuredWidth() {
@@ -129,19 +132,19 @@ export function SpineProfile({
   const step = Math.max(1, Math.ceil(strikes.length / 11));
   const ruled = sorted.filter((_, i) => i % step === 0 || i === sorted.length - 1);
 
-  // Right-margin callouts, nudged apart vertically; leaders stay at true price.
-  const minGap = 15;
-  const callouts = annotations
-    .filter((a) => a.price >= lo && a.price <= hi)
-    .map((a) => ({ ...a, ly: y(a.price) }))
-    .sort((a, b) => a.ly - b.ly);
-  for (let i = 1; i < callouts.length; i++) {
-    if (callouts[i].ly - callouts[i - 1].ly < minGap) callouts[i].ly = callouts[i - 1].ly + minGap;
-  }
-  const overflowY = callouts.length ? callouts[callouts.length - 1].ly - (height - m.bottom) : 0;
-  if (overflowY > 0) for (const c of callouts) c.ly = Math.max(m.top, c.ly - overflowY);
-
+  // Right-margin callouts share the margin with the solid spot tag, so the
+  // layout treats spot as an immovable pivot: callouts spread apart from each
+  // other AND stay clear of the spot band (the old code only spaced callouts
+  // against callouts, so spot riding a put wall printed straight over its
+  // label). Leaders still anchor at true price.
   const spotY = y(spot);
+  const visible = annotations.filter((a) => a.price >= lo && a.price <= hi);
+  const laidY = layoutAroundPivot(
+    visible.map((a) => ({ key: a.label, y: y(a.price) })),
+    spotY,
+    { pivotGap: 17, minGap: 14, top: m.top + 5, bottom: height - m.bottom - 4 }
+  );
+  const callouts = visible.map((a) => ({ ...a, ly: laidY.get(a.label) ?? y(a.price) }));
   const hover = hoverIdx !== null ? sorted[hoverIdx] : null;
 
   function onMove(e: React.MouseEvent<SVGRectElement>) {
@@ -209,10 +212,21 @@ export function SpineProfile({
 
           {/* level callouts, right margin */}
           {callouts.map((c) => (
-            <g key={c.label}>
-              <line x1={axisR} y1={y(c.price)} x2={width - m.right + 6} y2={c.ly} stroke={c.color} strokeDasharray="3 3" opacity={0.55} />
-              <text x={width - m.right + 10} y={c.ly + 2.5} fill={c.color} fontSize={8.5} fontFamily="var(--font-data), monospace" letterSpacing="0.08em">
-                {c.label.toUpperCase()} {fmtNum(c.price, 2)}
+            <g key={c.label} opacity={c.dim ? 0.55 : 1}>
+              <circle cx={axisR} cy={y(c.price)} r={1.8} fill={c.color} />
+              <line x1={axisR + 2} y1={y(c.price)} x2={width - m.right + 6} y2={c.ly} stroke={c.color} strokeDasharray="3 3" opacity={0.4} />
+              <text
+                x={width - m.right + 10}
+                y={c.ly + 2.5}
+                fill={c.color}
+                fontSize={8.5}
+                fontFamily="var(--font-data), monospace"
+                letterSpacing="0.08em"
+                stroke="var(--panel)"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
+                {c.label.toUpperCase()} {fmtStrikeLabel(c.price)}
               </text>
             </g>
           ))}
