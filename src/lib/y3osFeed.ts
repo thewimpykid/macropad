@@ -1,7 +1,8 @@
 /**
- * Fetch + mapping layer for the y3os /greeks feed
- * (https://feed.y3os.com/greeks?symbol=...&key=...), which replaced the old
- * railway vendor entirely. Unlike that vendor, y3os ships real per-strike
+ * Fetch + mapping layer for the y3os /greeks feed (base URL + key come from
+ * Y3OS_API_BASE / Y3OS_API_KEY - the vendor has moved hosts more than once,
+ * so no host is hardcoded here), which replaced the old railway vendor
+ * entirely. Unlike that vendor, y3os ships real per-strike
  * gex/dex/vex/chex(charm)/tex(theta)/vegaEx/rex already computed server-side
  * (dense, $1-5-wide strikes, not the sparse every-$5-with-gaps 0DTE chain we
  * were getting before) plus real per-contract r/q/T/iv/oi in `ladderInputs` -
