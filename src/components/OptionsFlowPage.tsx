@@ -150,9 +150,19 @@ function CopyLevelsButton({ levels }: { levels: { label: string; price: number }
       onClick={onCopy}
       disabled={!levels.length}
       title={'Copy all plotted levels as price "label" lines - paste into a chart level-importer indicator'}
-      className="border border-[var(--border)] px-2 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-[0.06em] text-[var(--text-dim)] transition-colors duration-150 hover:text-[var(--text)] disabled:opacity-40"
+      className="btn-primary flex items-center gap-1.5 px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.08em] disabled:opacity-40"
     >
-      {state === "copied" ? "✓ copied" : state === "failed" ? "copy failed" : "copy levels"}
+      {state === "copied" ? (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M2 6.5 5 9.5 10 3" />
+        </svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" aria-hidden>
+          <rect x="4" y="4" width="7" height="7" />
+          <path d="M8 4V1H1v7h3" />
+        </svg>
+      )}
+      {state === "copied" ? "copied" : state === "failed" ? "copy failed" : "copy levels"}
     </button>
   );
 }
